@@ -11,17 +11,15 @@ void find_hammings_and_mark(const unsigned char **in_variadic_subchar, int outs_
         (unsigned char (*)[len_rows][len_cols])in_variadic_subchar;
 
     int diff = 0;
-
-
-    for (size_t i = 0; i < len_rows; ++i) {        
+    for (size_t i = 0; i < NUM_ROWS(in_2d_ptr); ++i) {        
         if (outs_labels[i] != 0) continue;
 
-        for (size_t j = i + 1; j < len_rows; ++j) {
+        for (size_t j = i + 1; j < NUM_ROWS(in_2d_ptr); ++j) {
             if (outs_labels[j] != 0) continue;
 
             char *s1 = in_variadic_subchar[i];
             char *s2 = in_variadic_subchar[j];
-            diff = get_lazy_hamming(s1, s2);;
+            diff = get_lazy_hamming(s1, s2, NUM_COLS(in_2d_ptr));;
             outs_labels[j] = diff;
         }
     }
@@ -32,23 +30,15 @@ void find_hammings_and_mark(const unsigned char **in_variadic_subchar, int outs_
 pads the smaller string to the size of the larger string and 
 gets their lazy hamming
 */
-int get_lazy_hamming(char *s1, char *s2) {
+int get_lazy_hamming(char *s1, char *s2, int num_cols) {
     size_t diff = 0;
 
-    str_size_s str_lens = ARG_MAX_STR(s1, s2);
-    
-    char c_s = *str_lens.smaller_str++;
-    char c_l = *str_lens.larger_str++;
-
-    while (c_s) {
-        if (c_s != c_l) ++diff;
+    for (size_t m = 0; m < num_cols; ++m) {
+        if (s1[m] != s2[m]) ++diff;
         if (diff > 1) return 0;
-
-        c_s = *str_lens.smaller_str++;
-        c_l = *str_lens.larger_str++;
-    }   
-
-    return 1;    
+    }
+    
+    return 1;
 }
 
 /*
