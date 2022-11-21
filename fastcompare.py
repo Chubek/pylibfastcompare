@@ -1,8 +1,10 @@
+from functools import reduce
 import sys
 from itertools import product
 from multiprocessing import Pool
 from time import time
 from typing import Dict, List, Tuple
+import numpy as np
 
 import cffi
 from Bio.SeqIO.FastaIO import SimpleFastaParser
@@ -29,11 +31,20 @@ def fastcompare(cluster: List[Tuple[str, str]], return_dups: bool) -> List[Tuple
         return cluster
     
     rows = list(map(lambda x: x[1], cluster))
-    rows_delimited = delimit(rows).encode('ascii')
-    s_delim = ffi.new("char[]", rows_delimited)
+    maxlen = len(max(rows, key=lambda x: len(x)))
+    #rows_delimited = delimit(rows).encode('ascii')
+
+    mapped_np = []
+    def map_to_nparray(s: str, mapped_np=mapped_np):
+        mapped_np.append(list(s.encode('ascii')) + ([0] * (maxlen - len(s))))
+
+    list(map(map_to_nparray, rows))
+    mapped_np = np.asanyarray(mapped_np, dtype=np.uint8)
+    char_arr = ffi.cast(f"const unsigned char*[{len(rows)}]", mapped_np.ctypes.data)
+    #s_delim = ffi.new("char[]", rows_delimited)
     out = ffi.new("int[]", [0] * len(rows))
 
-    lib.find_hammings_and_mark(s_delim, out)
+    lib.find_hammings_and_mark(char_arr, out, len(rows), maxlen)
 
     filtered = []
     cntr = Counter()
@@ -71,11 +82,11 @@ def run_concurrently(clusters: Dict[str, List[Tuple[str, str]]], num_proc=6, ret
 
     with Pool(num_proc) as pool:
         for res in pool.starmap(
-            fastcompare,
+           fastcompare,
             product(clusters.values(), [return_dups]),
             chunksize=1000
         ):
-            fin.extend(res)
+            fin.extend(res)   
 
     return fin
 

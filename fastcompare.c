@@ -6,25 +6,26 @@ given a null-terminaed, pipe-separated buffer of chars, it will first separate t
 then run through the separated strings in a double loop with a skip of
 one in the second loop. If that number has been eliminated, it will skip.
 */
-void find_hammings_and_mark(char *in_pipe_separated, int outs_labels[]) {  
-    str_split_s split_s;
-    str_split(&split_s, in_pipe_separated);
+void find_hammings_and_mark(const unsigned char **in_variadic_subchar, int outs_labels[], int len_rows, int len_cols) {  
+    unsigned char (*in_2d_ptr)[len_rows][len_cols] =
+        (unsigned char (*)[len_rows][len_cols])in_variadic_subchar;
+
     int diff = 0;
 
-    for (size_t i = 0; i < split_s.cnt; ++i) {        
+
+    for (size_t i = 0; i < len_rows; ++i) {        
         if (outs_labels[i] != 0) continue;
 
-        for (size_t j = i + 1; j < split_s.cnt; ++j) {
+        for (size_t j = i + 1; j < len_rows; ++j) {
             if (outs_labels[j] != 0) continue;
 
-            char *s1 = split_s.splt_strs[i];
-            char *s2 = split_s.splt_strs[j];
+            char *s1 = in_variadic_subchar[i];
+            char *s2 = in_variadic_subchar[j];
             diff = get_lazy_hamming(s1, s2);;
             outs_labels[j] = diff;
         }
     }
-
-    free(split_s.splt_strs);    
+    
 }
 
 /*
@@ -77,6 +78,7 @@ char *tokenizer(char *in, int *head) {
             new_size += size_token;
 
             new_alloc = realloc(frag, new_size + 1);
+            printf("%d\n", 1111);
             if (!new_alloc) {
                 printf("Error doing the final token realloc, exiting...\n");
                 exit(1);
@@ -96,7 +98,7 @@ char *tokenizer(char *in, int *head) {
         if (size_token == BUFFSIZE) {
             new_size = BUFFSIZE * ++prog;
             new_alloc = realloc(frag, new_size);
-
+            printf("%d\n", 22222);
             if (!new_alloc) {
                 printf("Error reallocating token fragment, exiting...\n");
                 exit(1);

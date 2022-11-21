@@ -17,7 +17,7 @@ ffibuilder.cdef(
     } str_split_s;
     
     int get_lazy_hamming(char *s1, char *s2);
-    void find_hammings_and_mark(char *in_pipe_separated, int outs_labels[]);
+    void find_hammings_and_mark(const unsigned char **in_variadic_subchar, int outs_labels[], int len_rows, int len_cols);
     void str_split(str_split_s *self, char *in);
     char *tokenizer(char *in, int *head);
    """

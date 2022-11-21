@@ -1,6 +1,6 @@
 from fastcompare import run_pylibfastcompare
 
-FILE = "EOG7B0GZN.aa.fa"
+FILE = "SRR12778644.fa"
 NUM_PROC = 6
 RETURN_DUPS = False
 
