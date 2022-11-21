@@ -74,7 +74,7 @@ def read_to_clusters(path: str, limit=10) -> Dict[str, List[Tuple[str, str]]]:
     return clusters
 
 
-def run_concurrently(clusters: Dict[str, List[Tuple[str, str]]], num_proc=6, return_dups=False) -> Dict[int, List[Tuple[str, str]]]:
+def run_concurrently(clusters: Dict[str, List[Tuple[str, str]]], num_proc=6, return_dups=False) -> List[Dict[int, List[Tuple[str, str]]]]:
     print("Starting pool...")
 
     fin = []
@@ -90,7 +90,7 @@ def run_concurrently(clusters: Dict[str, List[Tuple[str, str]]], num_proc=6, ret
     return fin
 
 
-def run_pylibfastcompare(path: str, num_proc=6, return_dups=False) -> Dict[int, List[Tuple[str, str]]]:
+def run_pylibfastcompare(path: str, num_proc=6, return_dups=False) -> List[Dict[int, List[Tuple[str, str]]]]:
     clusters = read_to_clusters(path)
     fin = run_concurrently(clusters, num_proc, return_dups)
 
