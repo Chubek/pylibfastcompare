@@ -31,6 +31,3 @@ class MmapFastaParser:
     def __pos__(self) -> Tuple[str, str]:
         return self.__next__()
 
-
-aa = MmapFastaParser("EOG7B0GZN.aa.fa")
-print(next(aa))
