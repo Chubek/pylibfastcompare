@@ -1,4 +1,5 @@
-import pprint
+import os
+from pathlib import Path
 import sys
 from multiprocessing import Pool
 from typing import Dict, List, Tuple
@@ -8,9 +9,9 @@ import numpy as np
 import tqdm
 from Bio.SeqIO.FastaIO import SimpleFastaParser
 from phymmr_cluster import get_max_and_pad, read_fasta_get_clusters
-import os
 
 from _fastcompare import ffi, lib
+from mmapfastaparser import MmapFastaParser
 
 if 'FASTCOM_SO' in os.environ:
     if os.environ['FASTCOMP_SO'] == "1":
@@ -74,9 +75,15 @@ def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[int, List[Tuple[str, str
 
 def read_to_clusters(path: str, limit=10) -> Dict[str, List[Tuple[str, str]]]:
     clusters = {}
-    for header, seq in SimpleFastaParser(open(path, 'r')):
+    recs = MmapFastaParser(Path(path))
+
+    nxt = +recs
+    while nxt:
+        header, seq = nxt
         clusters.setdefault(seq[:limit], [])
         clusters[seq[:limit]].append((header, seq))
+        
+        nxt = +recs
 
     return clusters
 
