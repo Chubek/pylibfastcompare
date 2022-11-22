@@ -16,6 +16,11 @@ if 'FASTCOM_SO' in os.environ:
     if os.environ['FASTCOMP_SO'] == "1":
         ffi = cffi.FFI()
 
+DICT_DUP_LABEL = {
+    1: "DUP",
+    0: "NONDUP "
+}
+
 class Counter:
     def __init__(self) -> None:
         self.cnt = 0
@@ -58,8 +63,8 @@ def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[int, List[Tuple[str, str
     cntr = Counter()
 
     def filter_cluster(cntr=cntr, out=out, filtered=filtered):
-        filtered.setdefault(out[cntr()], [])
-        filtered[out[cntr()]].append(cluster[cntr()])
+        filtered.setdefault(DICT_DUP_LABEL[out[cntr()]], [])
+        filtered[DICT_DUP_LABEL[out[cntr()]]].append(cluster[cntr()])
 
         +cntr
 
