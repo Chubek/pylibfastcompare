@@ -15,6 +15,10 @@ all: clean libfastcompare setenv
 setenv:
 	echo 'export LD_LIBRARY_DIR=$LD_LIBRARY_DIR:'$(DESTDIR)$(PREFIX)'/lib/' >> ~/.bashrc
 
+setenvpwd:
+	echo 'export LD_LIBRARY_DIR=$LD_LIBRARY_DIR:'$(pwd) >> ~/.bashrc
+
+
 install: libfastcompare.so
 	install -d $(DESTDIR)$(PREFIX)/lib/
 	install -m 644 $(target_so) $(DESTDIR)$(PREFIX)/lib/

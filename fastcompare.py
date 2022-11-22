@@ -1,20 +1,20 @@
-from functools import reduce
+import pprint
 import sys
-from itertools import product
 from multiprocessing import Pool
-from time import time
 from typing import Dict, List, Tuple
-import numpy as np
 
 import cffi
+import numpy as np
+import tqdm
 from Bio.SeqIO.FastaIO import SimpleFastaParser
 from phymmr_cluster import get_max_and_pad, read_fasta_get_clusters
+import os
 
 from _fastcompare import ffi, lib
 
-DELIM = '|'
-
-#ffi = cffi.FFI()
+if 'FASTCOM_SO' in os.environ:
+    if os.environ['FASTCOMP_SO'] == "1":
+        ffi = cffi.FFI()
 
 class Counter:
     def __init__(self) -> None:
@@ -26,28 +26,36 @@ class Counter:
     def __call__(self) -> int:
         return self.cnt
 
-def fastcompare(cluster: List[Tuple[str, str]], return_dups: bool) -> Dict[int, List[Tuple[str, str]]]:
+def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[int, List[Tuple[str, str]]]:
     if len(cluster) < 2:
-        return cluster
-    
-    rows = list(map(lambda x: x[1], cluster))
-    maxlen = len(max(rows, key=lambda x: len(x)))
-    len_row = len(rows)
+        return {-1: cluster}
 
-    mapped_np = []
-    def map_to_nparray(s: str, mapped_np=mapped_np):
-        mapped_np.append(list(s.encode('ascii')) + ([0] * (maxlen - len(s))))
+    if len(cluster) % 2 != 0:
+        cluster = cluster[:len(cluster) - 1]
 
-    list(map(map_to_nparray, rows))
-    mapped_np = np.asanyarray(mapped_np, dtype=np.uint8)
-    char_arr = ffi.cast(f"const unsigned char*[{len_row}]", mapped_np.ctypes.data)
-    out = ffi.new("int[]", [0] * len_row)
+    seqs_sep = list(map(lambda x: x[1], cluster))
+    maxlen = len(max(seqs_sep, key=lambda x: len(x)))
+    rows = len(seqs_sep)
 
-    lib.find_hammings_and_mark(char_arr, out, len_row, maxlen)
+    input_list = []
+    def to_byte_and_pad(ins: str, input_list=input_list):
+        inst_bytes_list = list(ins.encode('ascii'))
+        inst_bytes_padded = inst_bytes_list + ([0] * (maxlen - len(ins)))
+        input_list.append(inst_bytes_padded)
+    list(map(to_byte_and_pad, seqs_sep))
+
+    arr_int = ffi.cast(f"char*[{rows}]", np.asanyarray(input_list, dtype=np.uint8).ctypes.data)
+    out = ffi.new("int[]", [0] * rows)
+
+    lib.find_hammings_and_mark(
+        arr_int,
+        out,
+        rows,
+        maxlen
+    )
 
     filtered = {}
     cntr = Counter()
-    mark_to_use = int(return_dups)
 
     def filter_cluster(cntr=cntr, out=out, filtered=filtered):
         filtered.setdefault(out[cntr()], [])
@@ -55,37 +63,41 @@ def fastcompare(cluster: List[Tuple[str, str]], return_dups: bool) -> Dict[int, 
 
         +cntr
 
-    list(map(lambda _: filter_cluster(), range(len_row)))
-
+    list(map(lambda _: filter_cluster(), range(rows)))
     return filtered
 
 
-def delimit(lstr: List[str]) -> str:
-    return DELIM.join(lstr) + DELIM
-
 def read_to_clusters(path: str, limit=10) -> Dict[str, List[Tuple[str, str]]]:
-    recs = SimpleFastaParser(open(path, 'r'))
     clusters = {}
-
-    for header, row in recs:
-        clusters.setdefault(row[:limit], [])
-        clusters[row[:limit]].append((header, row))
+    for header, seq in SimpleFastaParser(open(path, 'r')):
+        clusters.setdefault(seq[:limit], [])
+        clusters[seq[:limit]].append((header, seq))
 
     return clusters
 
 
-def run_concurrently(clusters: Dict[str, List[Tuple[str, str]]], num_proc=6, return_dups=False) -> List[Dict[int, List[Tuple[str, str]]]]:
+def run_concurrently(
+    clusters: Dict[str, List[Tuple[str, str]]], 
+    num_proc=6, return_dups=False
+) -> List[Dict[int, List[Tuple[str, str]]]]:
     print("Starting pool...")
+    clusters_sorted = sorted(list(clusters.values()), key=lambda x: len(x))
+    clusters_sorted.reverse()
 
-    fin = []
+
 
     with Pool(num_proc) as pool:
-        for res in pool.starmap(
-           fastcompare,
-            product(clusters.values(), [return_dups]),
-            chunksize=1000
-        ):
-            fin.extend(res)   
+        fin = list(
+            tqdm.tqdm(
+                pool.imap(
+                   fastcompare,
+                   clusters_sorted,
+                   chunksize=1000
+               ), 
+                total=len(clusters_sorted)
+            )
+       )
+
 
     return fin
 
@@ -93,7 +105,6 @@ def run_concurrently(clusters: Dict[str, List[Tuple[str, str]]], num_proc=6, ret
 def run_pylibfastcompare(path: str, num_proc=6, return_dups=False) -> List[Dict[int, List[Tuple[str, str]]]]:
     clusters = read_to_clusters(path)
     fin = run_concurrently(clusters, num_proc, return_dups)
-
     return fin
 
 if __name__ == "__main__":

@@ -2,3 +2,4 @@ cffi
 biopython
 phymmr_cluster
 numpy
+tqdm
