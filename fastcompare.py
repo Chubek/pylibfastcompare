@@ -18,7 +18,7 @@ if 'FASTCOM_SO' in os.environ:
 
 DICT_DUP_LABEL = {
     1: "DUP",
-    0: "NONDUP "
+    0: "NONDUP"
 }
 
 class Counter:
