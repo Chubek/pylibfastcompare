@@ -86,45 +86,24 @@ def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Di
     return {"Clean": deduped, "Dupes": kicked_and_masters}
 
 
-def read_to_clusters(path: str, limit=10) -> Dict[str, List[Tuple[str, str]]]:
+def read_to_clusters(path: str, limit=10, is_large=False) -> Dict[str, List[Tuple[str, str]]]:
     clusters = {}
     recs = MmapFastaParser(Path(path))
 
     nxt = +recs
     while nxt:
         header, seq = nxt
-        clusters.setdefault(seq[:limit] + str(len(seq)), [])
-        clusters[seq[:limit] + str(len(seq))].append((header, seq))
+        key = seq[:limit] + "_" + str(len(seq))
+        if is_large:
+            key += max(set(seq), key=seq.count) + "_" + min(set(seq), key=seq.count) + "".join(list(set(seq)))
+
+        clusters.setdefault(key, [])
+        clusters[key].append((header, seq))
         
         nxt = +recs
  
     return clusters
 
-
-def subsequent_clusters(clusters: Dict[str, List[Tuple[str, str]]]) -> Dict[str, List[Tuple[str, str]]]:
-    clusters_fin = {}
-    
-    for k, v in clusters.items():
-        len_cluster = len(v)        
-        
-        if len_cluster > 300:
-            denum_rand = 2 if len_cluster > 2000 else 4
-            rands = [randint(0, len_cluster) for _ in range(len_cluster // denum_rand)]
-            
-            for header, seq in v:
-                l = len(seq)
-                most_common = max(seq, key=seq.count)
-                least_common = min(seq, key=seq.count)
-                rand_id = choice(rands)
-
-                key = f"{k}-{l}-{most_common}-{least_common}-{rand_id}"
-                clusters_fin.setdefault(key, [])
-                clusters_fin[key].append((header, seq))
-
-        else:
-            clusters_fin[k] = v
-
-    return clusters_fin
 
 def run_concurrently(
     clusters: Dict[str, List[Tuple[str, str]]], 
@@ -169,9 +148,13 @@ def run_concurrently(
 def run_pylibfastcompare(
     path: str, num_proc=6, limit=10, subsequent_max_size=20
 ) -> Dict[str, Dict[str, str]]:
-    clusters = read_to_clusters(path, limit=limit)
-    if (os.stat(path).st_size // 1000000) > subsequent_max_size:
-        clusters = subsequent_clusters(clusters=clusters)
+    is_large = (os.stat(path).st_size // 1000000) > subsequent_max_size
+    clusters = read_to_clusters(
+        path, 
+        limit=limit, 
+        is_large=is_large
+    )
+
     fin = run_concurrently(clusters, num_proc)
     
     return fin
