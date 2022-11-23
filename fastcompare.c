@@ -37,7 +37,7 @@ void find_hammings_and_mark(char *in[], int outs_labels[], int len_rows, int max
                 cmp += s1[m] ^ s2[m];
             };
 
-            outs_labels[j] = (cmp <= 1) ? i : 0; 
+            outs_labels[j] = (cmp <= 1) ? i : -1; 
         }
     }
 }

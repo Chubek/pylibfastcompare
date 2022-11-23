@@ -37,7 +37,7 @@ class Counter:
 
 def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Dict[str, Dict[str, str]]]:
     if len(cluster) < 2:
-        return None
+        return {"Clean": {cluster[0][0]: cluster[0][1]}, "Dupes": {}}
 
     if len(cluster) % 2 != 0:
         cluster = cluster[:len(cluster) - 1]
@@ -74,8 +74,9 @@ def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Di
         deduped=deduped
     ):
         master_ind = out[cntr()]
+
         subject_header, subject_seq = cluster[cntr()]
-        if bool(master_ind):
+        if master_ind > -1:
             master_header, _ = cluster[master_ind]
             kicked_and_masters[subject_header] = {"Seq": subject_seq, "Master": master_header}
         else:
@@ -83,7 +84,7 @@ def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Di
 
         +cntr
     list(map(lambda _: filter_cluster(), range(rows)))
-    return {"Dedup": deduped, "Kicked": kicked_and_masters}
+    return {"Clean": deduped, "Dupes": kicked_and_masters}
 
 
 def read_to_clusters(path: str, limit=10) -> Dict[str, List[Tuple[str, str]]]:
@@ -146,37 +147,31 @@ def run_concurrently(
         )
     )
 
-
-    all_in_one_dict = {}
+    all_in_one_dict = {"Dupes": {}, "Clean": {}}
     for d in fin:
         if d is None: continue
 
-        all_in_one_dict.setdefault("Dedup", {})
-        all_in_one_dict.setdefault("Kicked", {})
-        dedup = d['Dedup']
-        kicked = d['Kicked']
+        dedup = d['Clean']
+        kicked = d['Dupes']
 
-        try:
+        if len(dedup) > 0:
             for k, v in dedup.items():
-                all_in_one_dict['Dedup'][k] = v
-        except:
-            pass
+                all_in_one_dict["Clean"][k] = v
 
-        try:
+        if len(kicked) > 0:
             for k, v in kicked.items():
-                all_in_one_dict['Kicked'][k] = v
-        except:
-            pass
-
+                all_in_one_dict["Dupes"][k] = v
+    print(f"Got {len(all_in_one_dict['Dupes'])} dupes")
     return all_in_one_dict
     
 
 
 def run_pylibfastcompare(
-    path: str, num_proc=6, limit=10
+    path: str, num_proc=6, limit=10, subsequent_max_size=20
 ) -> Dict[str, Dict[str, str]]:
     clusters = read_to_clusters(path, limit=limit)
-    clusters = subsequent_clusters(clusters=clusters)
+    if (os.stat(path).st_size // 1000000) > subsequent_max_size:
+        clusters = subsequent_clusters(clusters=clusters)
     fin = run_concurrently(clusters, num_proc)
     
     return fin

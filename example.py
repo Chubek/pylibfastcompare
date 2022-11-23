@@ -1,11 +1,12 @@
 from fastcompare import run_pylibfastcompare
 import json
 
-FILE = "SRR12778644.fa"
+FILE = "EOG7B0GZN.aa.fa"
 NUM_PROC = 48
-CLUSTER_LEAD_NUM_CHR = 25
+CLUSTER_LEAD_NUM_CHR = 20
+SUBSEQUENT_MAX_SIZE = 20
 
-res = run_pylibfastcompare(FILE, NUM_PROC, CLUSTER_LEAD_NUM_CHR)
-with open("res.json", "w") as fw:
+res = run_pylibfastcompare(FILE, NUM_PROC, CLUSTER_LEAD_NUM_CHR, SUBSEQUENT_MAX_SIZE)
+with open(f"{FILE}.json", "w") as fw:
     fw.write(json.dumps(res, indent=4, sort_keys=True))
 
