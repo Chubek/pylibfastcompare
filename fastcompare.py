@@ -43,18 +43,18 @@ def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Di
         cluster = cluster[:len(cluster) - 1]
 
     seqs_sep = list(map(lambda x: x[1], cluster))
-    maxlen = len(max(seqs_sep, key=lambda x: len(x))) + 1
     rows = len(seqs_sep)
+    maxlen = len(seqs_sep[0]) + 1
 
     input_list = []
     def to_byte_and_pad(ins: str, input_list=input_list):
         inst_bytes_list = list(ins.encode('ascii'))
-        inst_bytes_padded = inst_bytes_list + ([0] * (maxlen - len(ins)))
+        inst_bytes_padded = inst_bytes_list + [0]
         input_list.append(inst_bytes_padded)
     list(map(to_byte_and_pad, seqs_sep))
 
     arr_int = ffi.cast(f"char*[{rows}]", np.asanyarray(input_list, dtype=np.uint8).ctypes.data)
-    out = ffi.new("int[]", [0] * rows)
+    out = ffi.new("int[]", [-1] * rows)
 
     lib.find_hammings_and_mark(
         arr_int,
@@ -74,7 +74,6 @@ def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Di
         deduped=deduped
     ):
         master_ind = out[cntr()]
-
         subject_header, subject_seq = cluster[cntr()]
         if master_ind > -1:
             master_header, _ = cluster[master_ind]
@@ -94,8 +93,8 @@ def read_to_clusters(path: str, limit=10) -> Dict[str, List[Tuple[str, str]]]:
     nxt = +recs
     while nxt:
         header, seq = nxt
-        clusters.setdefault(seq[:limit], [])
-        clusters[seq[:limit]].append((header, seq))
+        clusters.setdefault(seq[:limit] + str(len(seq)), [])
+        clusters[seq[:limit] + str(len(seq))].append((header, seq))
         
         nxt = +recs
  
@@ -155,12 +154,13 @@ def run_concurrently(
         kicked = d['Dupes']
 
         if len(dedup) > 0:
-            for k, v in dedup.items():
-                all_in_one_dict["Clean"][k] = v
+            for k1, v1 in dedup.items():
+                all_in_one_dict["Clean"][k1] = v1
 
         if len(kicked) > 0:
-            for k, v in kicked.items():
-                all_in_one_dict["Dupes"][k] = v
+            for k2, v2 in kicked.items():
+                all_in_one_dict["Dupes"][k2] = v2
+
     print(f"Got {len(all_in_one_dict['Dupes'])} dupes")
     return all_in_one_dict
     

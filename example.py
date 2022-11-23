@@ -1,9 +1,9 @@
 from fastcompare import run_pylibfastcompare
 import json
 
-FILE = "EOG7B0GZN.aa.fa"
+FILE = "EOG73NSQM.aa.fa"
 NUM_PROC = 48
-CLUSTER_LEAD_NUM_CHR = 20
+CLUSTER_LEAD_NUM_CHR = 10
 SUBSEQUENT_MAX_SIZE = 20
 
 res = run_pylibfastcompare(FILE, NUM_PROC, CLUSTER_LEAD_NUM_CHR, SUBSEQUENT_MAX_SIZE)

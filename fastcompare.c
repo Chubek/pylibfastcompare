@@ -14,29 +14,21 @@ void find_hammings_and_mark(char *in[], int outs_labels[], int len_rows, int max
     int cmp;
     char *s1;
     char *s2;
-    size_t strlen1;
-    size_t strlen2;
 
     while (i++ < len_rows) {
-        if (outs_labels[i] != 0) continue;
-
+        if (outs_labels[i] != -1) continue;
         j = i + 1;
         while (j++ < len_rows) {
-            if (outs_labels[j] != 0) continue;
+            if (outs_labels[j] != -1) continue;
 
             s1 = (char *)(*nested_array)[i];
             s2 = (char *)(*nested_array)[j];
-            strlen1 = strlen(s1);
-            strlen2 = strlen(s2);
-            
-            if (strlen1 != strlen2) continue;
 
             m = -1;
             cmp = 0;
-            while ((m++ < (int)strlen1) && (cmp <= 2)) {
+            while ((m++ < maxlen) && (cmp <= 2)) {
                 cmp += s1[m] ^ s2[m];
             };
-
             outs_labels[j] = (cmp <= 1) ? i : -1; 
         }
     }
