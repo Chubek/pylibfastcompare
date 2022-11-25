@@ -1,19 +1,11 @@
-from functools import reduce
 import os
-import pprint
-import string
-import sys
-from itertools import accumulate, combinations
 from multiprocessing import Pool
 from pathlib import Path
-from random import choice, randint
-from typing import Dict, List, Tuple, Union
-from scipy.spatial.distance import hamming
+from typing import Dict, List, Tuple
+
 import cffi
 import numpy as np
 import tqdm
-from Bio.SeqIO.FastaIO import SimpleFastaParser
-from phymmr_cluster import get_max_and_pad, read_fasta_get_clusters
 
 from _fastcompare import ffi, lib
 from mmapfastaparser import MmapFastaParser
@@ -92,7 +84,7 @@ def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Di
 
 
 def read_to_prior_hashmap(
-    path: str, 
+    path: str,
     limit=10
 ) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, Tuple[int, int]]]:
     prior = {}
@@ -115,7 +107,7 @@ def read_to_prior_hashmap(
 
 
 def read_to_hashmap(
-    prior: Dict[str, Tuple[str, str]], 
+    prior: Dict[str, Tuple[str, str]],
     leads: Dict[str, Tuple[int, int]],
     limit=10
 ):
@@ -138,7 +130,6 @@ def read_to_hashmap(
             if num > 120000:
                 dividend = 2.75
 
-
             avg_lens = sum_lens // num
             seq_placeholder = "." * avg_lens
             limit_new = limit
@@ -147,7 +138,6 @@ def read_to_hashmap(
                 limit_new += 1
 
             limit = limit_new
-            
 
         all_items = prior[h]
         for head, seq in all_items:
@@ -156,7 +146,7 @@ def read_to_hashmap(
 
             clusters.setdefault(key, [])
             clusters[key].append((head, seq[limit:]))
-       
+
     return clusters
 
 
@@ -181,7 +171,7 @@ def run_concurrently(
         )
 
     all_in_one_dict = {"Dupes": {}, "Clean": {}}
-    
+
     for d in fin:
         all_in_one_dict['Dupes'].update(d['Dupes'])
         all_in_one_dict['Clean'].update(d['Clean'])
