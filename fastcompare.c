@@ -15,8 +15,8 @@ void find_hammings_and_mark(char *in[], int outs_labels[], int len_rows, int max
     char *s1;
     char *s2;
 
-    while (i++ < len_rows) {
-        if (outs_labels[i] != -1) continue;
+    while (i++ < len_rows) {      
+        set_j:
         j = i + 1;
         while (j++ < len_rows) {
             if (outs_labels[j] != -1) continue;
@@ -26,10 +26,17 @@ void find_hammings_and_mark(char *in[], int outs_labels[], int len_rows, int max
 
             m = -1;
             cmp = 0;
-            while ((m++ < maxlen) && (cmp <= 2)) {
-                cmp += s1[m] ^ s2[m];
+            while (m++ < maxlen) {
+                if (s1[m] != s2[m]) ++cmp;
+
+                if (cmp > 1) goto set_out;
             };
-            outs_labels[j] = (cmp <= 1) ? i : -1; 
+            
+            set_out:
+            if (cmp < 2) {
+                outs_labels[j] = i;
+                goto set_j;
+            }
         }
     }
 }
