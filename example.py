@@ -1,7 +1,7 @@
 from fastcompare import run_pylibfastcompare
 import json
 
-FILE = "INSbttTARAAPEI-83.fa"
+FILE = "mytest.fa"
 NUM_PROC = 48
 CLUSTER_LEAD_NUM_CHR = 15
 SUBSEQUENT_MAX_SIZE = 20

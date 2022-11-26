@@ -30,6 +30,87 @@ class Counter:
     def __call__(self) -> int:
         return self.cnt
 
+class Node:
+    def __init__(self, data=None):
+        self.data = data
+        self.right = None
+        self.left = None
+        self.eq = None
+
+
+class TST:
+    def __init__(self):
+        self.root = Node()
+        self.leaf = None
+
+    @staticmethod
+    def _search(node, leaf):
+        while node:
+            if node.data == leaf:
+                return node
+            if leaf < node.data:
+                node = node.left
+            else:
+                node = node.right
+        return None
+
+    def _insert(self, node, leaf):
+        if node is None:
+            return leaf
+        elif leaf.data == node.data:
+            return node
+        elif leaf.data < node.data:
+            node.left = self._insert(node.left, leaf)
+        else:
+            node.right = self._insert(node.right, leaf)
+        return node
+
+    def insert(self, word):
+        node = self.root
+        for char in word:
+            child = self._search(node.eq, char)
+            if not child:  # not null
+                # create a new node
+                child = Node(char)
+                node.eq = self._insert(node.eq, child)
+            node = child
+        if not self._search(node.eq, self.leaf):  # not null
+            node.eq = self._insert(node.eq, Node(self.leaf))
+
+    def search(self, word):
+        node = self.root
+        for c in word:
+            node = self._search(node.eq, c)
+            if not node:
+                return False
+        return self._search(node.eq, self.leaf) is not None
+
+    def _traverse(self, node, leaf):
+        if node:
+            for c in self._traverse(node.left, leaf):
+                yield c
+            if node.data == leaf:
+                yield []
+            else:
+                for c in self._traverse(node.eq, leaf):
+                    yield [node.data] + c
+            for c in self._traverse(node.right, leaf):
+                yield c
+
+    def traverse(self):
+        for w in self._traverse(self.root.eq, self.leaf):
+            print(''.join(w))
+
+    def common_prefix(self, chars):
+        node = self.root
+        buff = []
+        for char in chars:
+            buff.append(char)
+            node = self._search(node.eq, char)
+            if not node:
+                return
+        for x in self._traverse(node.eq, self.leaf):
+            yield ''.join(buff + x)
 
 def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Dict[str, Dict[str, str]]]:
     if len(cluster) < 2:
@@ -112,40 +193,34 @@ def read_to_hashmap(
     limit=10
 ):
     clusters = {}
+    
+    for seq_lead, curr_items in prior.items():
+        seq_lead = seq_lead.split("_")[0]
+        curr_lead = seq_lead
 
-    for h, (num, sum_lens) in leads.items():
-        if num > 1000:
-            dividend = 4.5
+        tst = TST()
+        
+        for header, seq in curr_items:
+            tst.insert(seq + "___" + header)
+        already_added = []
 
-            if num > 5000:
-                dividend = 4.25
-            if num > 10000:
-                dividend = 4.00
-            if num > 30000:
-                dividend = 3.75
-            if num > 60000:
-                dividend = 3.25
-            if num > 90000:
-                dividend = 3.00
-            if num > 120000:
-                dividend = 2.75
+        for header, seq in curr_items:
+            if (header, seq) in already_added: continue
 
-            avg_lens = sum_lens // num
-            seq_placeholder = "." * avg_lens
-            limit_new = limit
+            curr_lead_len = len(curr_lead)
+            new_lead = curr_lead
 
-            while len(seq_placeholder[:limit_new]) < int(avg_lens // dividend):
-                limit_new += 1
+            for char in seq[curr_lead_len:]:
+                new_lead += char
 
-            limit = limit_new
+                common_list = list(tst.common_prefix(new_lead))
+                if not common_list: break
 
-        all_items = prior[h]
-        for head, seq in all_items:
-            len_seq = len(seq)
-            key = seq[:limit] + "_" + str(len_seq)
+                already_added.extend(common_list)
+            
+            already_added = list(set(already_added))
+            clusters[new_lead] = [s.split("___") for s in already_added]
 
-            clusters.setdefault(key, [])
-            clusters[key].append((head, seq[limit:]))
 
     return clusters
 
@@ -184,7 +259,7 @@ def run_pylibfastcompare(
     path: str, num_proc=6, limit=10, subsequent_max_size=20
 ) -> Dict[str, Dict[str, str]]:
     clusters, leads = read_to_prior_hashmap(path, limit)
-    clusters = read_to_hashmap(clusters, leads)
+    clusters = read_to_hashmap(clusters, leads, limit=limit)
 
     fin = run_concurrently(clusters, num_proc)
 
