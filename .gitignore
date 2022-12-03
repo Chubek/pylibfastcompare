@@ -7,3 +7,4 @@ _*
 *.out
 *.o
 *.json
+vgcore*
