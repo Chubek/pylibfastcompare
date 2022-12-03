@@ -1,18 +1,22 @@
 import os
+import time
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import cffi
 import numpy as np
 import tqdm
 
-from _fastcompare import ffi, lib
+from _fastcompare import lib
 from mmapfastaparser import MmapFastaParser
 
-if 'FASTCOM_SO' in os.environ:
-    if os.environ['FASTCOMP_SO'] == "1":
-        ffi = cffi.FFI()
+SIZE_CHARS = 32
+SIZE_OUT = 4
+SIZE_HAM = 4
+
+ffi = cffi.FFI()
+
 
 DICT_DUP_LABEL = {
     1: "DUP",
@@ -29,6 +33,7 @@ class Counter:
 
     def __call__(self) -> int:
         return self.cnt
+
 
 class Node:
     def __init__(self, data=None):
@@ -112,6 +117,7 @@ class TST:
         for x in self._traverse(node.eq, self.leaf):
             yield ''.join(buff + x)
 
+
 def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Dict[str, Dict[str, str]]]:
     if len(cluster) < 2:
         return {"Clean": {cluster[0][0]: cluster[0][1]}, "Dupes": {}}
@@ -164,84 +170,152 @@ def fastcompare(cluster: List[Tuple[str, str]]) -> Dict[List[Dict[str, str]], Di
     return {"Clean": deduped, "Dupes": kicked_and_masters}
 
 
-def read_to_prior_hashmap(
+def cluster_on_len(
     path: str,
-    limit=10
 ) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, Tuple[int, int]]]:
-    prior = {}
-    leads = {}
+    clusters_length = {}
+
     recs = MmapFastaParser(Path(path))
 
     nxt = +recs
     while nxt:
         header, seq = nxt
-        key = seq[:limit] + "_" + str(len(seq))
-        prior.setdefault(key, [])
-        prior[key].append((header, seq))
-        leads.setdefault(key, [0, 0])
-        leads[key][0] += 1
-        leads[key][1] += len(seq)
+        key = f"{len(seq)}|{seq[:10]}"
+        clusters_length.setdefault(key, [])
+        clusters_length[key].append((header, seq))
 
         nxt = +recs
 
-    return prior, leads
+    return clusters_length
 
 
-def read_to_hashmap(
-    prior: Dict[str, Tuple[str, str]],
-    leads: Dict[str, Tuple[int, int]],
-    limit=10
-):
-    clusters = {}
-    
-    for seq_lead, curr_items in prior.items():
-        seq_lead = seq_lead.split("_")[0]
-        curr_lead = seq_lead
+def pack_cluster(cluster: List[Tuple[str, str]]) -> List[Tuple[List[int], Tuple[str, str]]]:
+    seqs_secluded = list(map(lambda x: x[1], cluster))
+    seqs_secluded_list_of_encoded_chars = list(map(lambda x: list(
+        x.encode('ascii')) + ([0] * (len(x) % SIZE_CHARS)), seqs_secluded))
 
-        tst = TST()
-        
-        for header, seq in curr_items:
-            tst.insert(seq + "___" + header)
-        already_added = []
+    ret = []
 
-        for header, seq in curr_items:
-            if (header, seq) in already_added: continue
+    for j, seq_ascii in enumerate(seqs_secluded_list_of_encoded_chars):
+        inner_list = []
+        for i in range(0, len(seq_ascii), SIZE_CHARS):
+            arr_in = ffi.cast(f"uint8_t[{SIZE_CHARS}]", np.asanyarray(
+                seq_ascii[i:i + SIZE_CHARS], dtype=np.uint8).ctypes.data)
+            out = ffi.new("uint64_t[1]", [0])
 
-            curr_lead_len = len(curr_lead)
-            new_lead = curr_lead
+            lib.pack_32_bytes_in_64_bits(arr_in, out)
+            inner_list.append(out[0])
 
-            for char in seq[curr_lead_len:]:
-                new_lead += char
+        ret.append((inner_list, cluster[j]))
 
-                common_list = list(tst.common_prefix(new_lead))
-                if not common_list: break
-
-                already_added.extend(common_list)
-            
-            already_added = list(set(already_added))
-            clusters[new_lead] = [s.split("___") for s in already_added]
+    return ret
 
 
-    return clusters
+def get_hamming_pair(a: List[int], b: List[int]) -> bool:
+    a = a + ([0] * (len(a) % SIZE_HAM))
+    b = b + ([0] * (len(b) % SIZE_HAM))
+
+    result = 0
+
+    for i in range(0, len(a), SIZE_HAM):
+        sub_a = a[i:i + SIZE_HAM]
+        sub_b = b[i:i + SIZE_HAM]
+
+        sub_a_arr = ffi.cast(
+            f"uint64_t[{SIZE_HAM}]", np.asanyarray(sub_a, dtype=np.uint64).ctypes.data)
+        sub_b_arr = ffi.cast(
+            f"uint64_t[{SIZE_HAM}]", np.asanyarray(sub_b, dtype=np.uint64).ctypes.data)
+        out = ffi.new("int[1]", [0])
+
+        lib.get_hamming_integers(sub_a_arr, sub_b_arr, out)
+
+        result += out[0]
+
+    True if result < 2 else False
+
+
+def get_hamming_cluster(
+    cluster: List[Tuple[List[int], Tuple[str, str]]]
+) -> Dict[
+    str, Union[Dict[str, str],
+               Dict[str, Dict[str, str]]
+               ]
+]:
+    packed_integers = list(map(lambda x: x[0], cluster))
+    items = list(map(lambda x: x[1], cluster))
+
+    results = [-1] * len(packed_integers)
+
+    for i, a in enumerate(packed_integers):
+        if results[i] != -1:
+            continue
+
+        for j, b in enumerate(packed_integers[i + 1:]):
+            if results[j] != -1:
+                continue
+
+            if get_hamming_pair(a, b):
+                results[j] = i
+
+    ret = {"Clean": {}, "Dupes": {}}
+
+    cntr = Counter()
+
+    def filter_cluster(
+        cntr=cntr,
+        results=results,
+        ret=ret,
+        items=items,
+    ):
+        master_ind = results[cntr()]
+        subject_header, subject_seq = items[cntr()]
+        if master_ind > -1:
+            master_header, _ = cluster[master_ind]
+            ret["Dupes"][subject_header] = {
+                "Seq": subject_seq, "Master": master_header}
+        else:
+            ret["Clean"][subject_header] = subject_seq
+
+    list(map(lambda _: filter_cluster(), range(len(items))))
+
+    return ret
+
+
+def pack_clusters(clusters: Dict[int, List[Tuple[str, str]]], p=6) -> List[List[Tuple[List[int], Tuple[str, str]]]]:
+    print("Packing clusters --- started pool...")
+
+    with Pool(p) as pool:
+        ret = list(
+            tqdm.tqdm(
+                pool.imap(
+                    pack_cluster,
+                    clusters.values(),
+                    chunksize=1000
+                ),
+                total=len(clusters)
+            )
+        )
+
+    return ret
 
 
 def run_concurrently(
-    clusters: Dict[str, List[Tuple[str, str]]],
+    clusters: Dict[int, List[Tuple[str, str]]],
     num_proc=6
 ) -> Dict[str, Dict[str, str]]:
-    print("Starting pool...")
-    clusters_sorted = sorted(list(clusters.values()), key=lambda x: len(x))
-    clusters_sorted.reverse()
+    clusteds_packed = pack_clusters(clusters, p=num_proc)
+
+    print("Doing hamming compare, started pool...")
 
     with Pool(num_proc) as pool:
         fin = list(
             tqdm.tqdm(
                 pool.imap(
-                    fastcompare,
-                    clusters_sorted,
+                    get_hamming_cluster,
+                    clusteds_packed,
                     chunksize=1000
                 ),
-                total=len(clusters_sorted)
+                total=len(clusteds_packed)
             )
         )
 
@@ -256,11 +330,14 @@ def run_concurrently(
 
 
 def run_pylibfastcompare(
-    path: str, num_proc=6, limit=10, subsequent_max_size=20
+    path: str, num_proc=6
 ) -> Dict[str, Dict[str, str]]:
-    clusters, leads = read_to_prior_hashmap(path, limit)
-    clusters = read_to_hashmap(clusters, leads, limit=limit)
+    print("Begenning clustering on length...")
+    t = time.time()
 
+    clusters = cluster_on_len(path)
     fin = run_concurrently(clusters, num_proc)
+
+    print(f"Finished. Took {time.time() - t} seconds.")
 
     return fin
