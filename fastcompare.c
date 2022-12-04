@@ -50,16 +50,56 @@ void reduce_integer_or_op(outtype_t in, outtype_t *reducer) {
     *reducer = in | *reducer;
 }
 
-void pack_32_bytes_in_64_bits(chartype_t in[SIZE_CHARS], outtype_t result[1]) {
+outtype_t pack_32_bytes_in_64_bits(chartype_t in[SIZE_CHARS]) {
     outtype_t out[SIZE_OUT];
     memset(out, 0, SIZE_OUT * sizeof(chartype_t));
 
     encode_gatacca(in, out);
 
-    result[0] = out[0] | out[1] | out[2] | out[3];;
+    return out[0] | out[1] | out[2] | out[3];;
 }
 
- 
+/* seq must be null-terminated */
+out_s pack_seq_into_64bit_integers(chartype_t *seq) {
+    size_t len_str = strlen(seq);
+    size_t size_padded = len_str + (len_str % SIZE_CHARS);
+    size_t size_out = (size_padded / SIZE_CHARS) * sizeof(uint64_t);
+
+    seq_t out = malloc(size_out);
+    memset(out, 0, size_out);
+
+    size_t j = 0;
+    chartype_t in[SIZE_CHARS];
+    for (size_t i = 0; i < size_padded; i += SIZE_CHARS) {
+        memset(in, 0, SIZE_CHARS * sizeof(chartype_t));
+        memcpy(in, &seq[i], SIZE_CHARS * sizeof(chartype_t));
+
+        out[j++] = pack_32_bytes_in_64_bits(in);
+    }
+
+    return (out_s){.out=out; out_len=j};
+}
+
+
+/* seq must be null-terminated */
+void insert_seq_in_hm(hm_s *self, char *seq) {
+    hmsize_t len_seq = (hmsize_t)strlen(seq);
+    out_s packed_out = pack_seq_into_64bit_integers(seq);
+
+    insert_into_hashmap(self, packed_out.out[0], packed_out.out, seq, len_seq, packed_out.len_out);
+} 
+
+hm_s *cluster_seqs(char **seqs_in, size_t num_seqs) {
+    hm_s hm = new_hashmap();
+
+    for (int i = 0; i < num_seqs; i++) {
+        insert_seq_in_hm(hm, seqs_in[i]);
+    }
+
+    return hm;
+}
+
+
 
 /*
 given a pointer to arrays of unsigned uint8_ts by Python, gets lazy hamming label. 1 for dup 0 for non-dup.
@@ -162,18 +202,14 @@ void init_hmv(hm_s *self, hmsize_t index, hmsize_t len_seq) {
     self->vec_vec[index] = (hmvalue_s){.arr=malloc(sizeof(hm_node)), .len_seq=len_seq, .n=0};
 }
 
-void resize_insert_hmn(hmn_t self, hmsize_t index, seq_t seq, hmsize_t len) {
-    self[index - 1] = (hm_node){.seq = malloc(sizeof(uint64_t) * len), .len_seq=len};
-
-    for (hmsize_t i = 0; i < len; ++i) {
-        self[index - 1].seq[i] = seq[i];
-    }
+void resize_insert_hmn(hmn_t self, hmsize_t index, seq_t seq, char *seq_str, hmsize_t len, , size_t out_len) {
+    self[index - 1] = (hm_node){.seq = seq, .len_seq=len, .seq_str=seq_str, .len_out=out_len};   
 }
 
-void resize_insert_hmv(hmvalue_s *self, seq_t seq) {
+void resize_insert_hmv(hmvalue_s *self, seq_t seq, char *seq_str, size_t out_len) {
     self->n++;
     self->arr = (hmn_t)realloc(self->arr, sizeof(hm_node) * self->n);
-    resize_insert_hmn(self->arr, self->n, seq, self->len_seq);
+    resize_insert_hmn(self->arr, self->n, seq, seq_str, self->len_seq, out_len);
 }
 
 void resize_hashmap(hm_s *self) {
@@ -202,7 +238,7 @@ void free_hashmap(hm_s *self) {
     free(self);
 }
 
-void insert_into_hashmap(hm_s *self, uint64_t key, seq_t  value, hmsize_t len_seq) {
+void insert_into_hashmap(hm_s *self, uint64_t key, seq_t  value, char *seq_str, hmsize_t len_seq, size_t out_len) {
     hmsize_t vec_index = hash_tuple_to_index(key, len_seq);
 
     if (self->n < vec_index) {
@@ -212,7 +248,7 @@ void insert_into_hashmap(hm_s *self, uint64_t key, seq_t  value, hmsize_t len_se
         init_hmv(self, vec_index - 1, len_seq);
     }
 
-    resize_insert_hmv(&self->vec_vec[vec_index - 1], value);
+    resize_insert_hmv(&self->vec_vec[vec_index - 1], value, out_len);
 }
 
 hmvalue_s get_hashmap_value(hm_s *self, uint64_t key, hmsize_t len_seq) {
