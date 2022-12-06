@@ -60,8 +60,7 @@ outtype_t pack_32_bytes_in_64_bits(chartype_t in[SIZE_CHARS]) {
 }
 
 /* seq must be null-terminated */
-out_s pack_seq_into_64bit_integers(chartype_t *seq) {
-    size_t len_str = strlen(seq);
+out_s pack_seq_into_64bit_integers(chartype_t *seq, size_t len_str) {
     size_t size_padded = len_str + (len_str % SIZE_CHARS);
     size_t size_out = (size_padded / SIZE_CHARS) * sizeof(uint64_t);
 
@@ -77,23 +76,23 @@ out_s pack_seq_into_64bit_integers(chartype_t *seq) {
         out[j++] = pack_32_bytes_in_64_bits(in);
     }
 
-    return (out_s){.out=out; out_len=j};
+    return (out_s){.out=out, .out_len=j};
 }
 
 
 /* seq must be null-terminated */
-void insert_seq_in_hm(hm_s *self, char *seq) {
-    hmsize_t len_seq = (hmsize_t)strlen(seq);
-    out_s packed_out = pack_seq_into_64bit_integers(seq);
+void insert_seq_in_hm(hm_s *self, char *seq, size_t index_in_array) {
+    size_t len_str = strlen(seq);
+    out_s packed_out = pack_seq_into_64bit_integers(seq, len_str);
 
-    insert_into_hashmap(self, packed_out.out[0], packed_out.out, seq, len_seq, packed_out.len_out);
+    insert_into_hashmap(self, packed_out.out[0], packed_out.out, len_str, packed_out.out_len, index_in_array);
 } 
 
 hm_s *cluster_seqs(char **seqs_in, size_t num_seqs) {
-    hm_s hm = new_hashmap();
+    hm_s *hm = new_hashmap();
 
     for (int i = 0; i < num_seqs; i++) {
-        insert_seq_in_hm(hm, seqs_in[i]);
+        insert_seq_in_hm(hm, seqs_in[i], i);
     }
 
     return hm;
@@ -127,43 +126,108 @@ int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM]) {
 
 }
 
-
-void get_hamming_cluster(hamtype_t *in_cluster, size_t len_rows, int *out) {
-    hamtype_t (*in_2d)[len_rows][SIZE_HAM] = (hamtype_t (*)[len_rows][SIZE_HAM])in_cluster;
-
-    hamtype_t a[SIZE_HAM];
-    hamtype_t b[SIZE_HAM];
-    int64_t i = -1;
-    int64_t j = 0;
-    int out_i = 0;
-    int out_j = 0;
+int hamming_hseq_pair(clusterseq_s a, clusterseq_s b) {
     int diff = 0;
 
-    while (i++ < (int64_t)len_rows) {
-        set_j:
+    hamtype_t a_buffer[SIZE_HAM];
+    hamtype_t b_buffer[SIZE_HAM];
+
+    size_t num_bytes =  SIZE_HAM * sizeof(hamtype_t);
+
+    for (size_t i = 0; i < a.out_len; i+=SIZE_HAM) {
+        memcpy(a_buffer, &a.seq_packed[i], num_bytes);
+        memcpy(b_buffer, &b.seq_packed[i], num_bytes);
+
+        diff += get_hamming_integers(a_buffer, b_buffer);
+    }
+
+    return diff;
+}
+
+void hamming_cluster_single(cluster_s *cluster) {
+    clusterseqarr_t cluster_seqs = cluster->arr;
+    hmsize_t cluster_size = cluster->n;
+    int diff = 0;
+
+    clusterseq_s *lead;
+    clusterseq_s *candidate;
+    for (size_t i = 0; i < cluster_size; ++i) {
+        set_diff:
+        lead = &cluster_seqs[i];
+        if (lead->is_dup) continue;
         diff = 0;
-        out_i = out[i];
-        if (out_i != -1) continue;
-        j = i + 1;
 
-        while (j < (int64_t)len_rows) {
-            out_j = out[j];
-            if (out_j != -1) { j++; continue; }
-  
-            memcpy(a, in_2d[i], SIZE_HAM * sizeof(hamtype_t));
-            memcpy(b, in_2d[j], SIZE_HAM * sizeof(hamtype_t));
+        for (size_t j = i + 1; j < cluster_size; ++j) {
+            candidate = &cluster_seqs[j];
+            if (candidate->is_dup) continue;
 
-            diff = get_hamming_integers(a, b); 
+            diff = hamming_hseq_pair(*lead, *candidate);
             if (diff < 2) {
-                out[j] = i;
-                goto set_j;                
-            }
-            j++;
+                insert_resize_dupe(lead, candidate);
+                goto set_diff;
+            } 
         }
     }
+    
 
 }
 
+/* seq must be null-terminated */
+void hamming_clusters_hm(hm_s *clustered) {
+    cluster_s *curr_cluster;
+
+    for (hmsize_t i = 0; i < clustered->n; ++i) {
+        curr_cluster = &clustered->vec_vec[i];
+        hamming_cluster_single(curr_cluster);         
+    }
+}
+
+void iterate_and_mark_dups(clusterseq_s lead, size_t out[]) {
+    if (lead.is_dup) return;
+
+    size_t lead_index = lead.index_in_array;
+    clusterseq_s *curr_dup;
+
+    for (int i = 0; i < lead.size_dup; ++i) {
+        curr_dup = lead.dupes[i];
+        out[curr_dup->index_in_array] = lead_index;
+    }
+}
+
+void cluster_ham_and_mark(char **seqs, size_t num_seqs, size_t out[]) {
+    hm_s *clustered = cluster_seqs(seqs, num_seqs);
+    hamming_clusters_hm(clustered);
+
+    clusterarr_t clusters_arr = clustered->vec_vec;
+    clusterseqarr_t curr_cluster_arr;
+    clusterseq_s curr_seq;
+
+    for (hmsize_t i = 0; i < clustered->n; ++i) {
+        curr_cluster_arr = clusters_arr[i].arr;
+
+        for (hmsize_t j = 0; j < clusters_arr[i].n; ++j) {
+            curr_seq = curr_cluster_arr[j];
+            iterate_and_mark_dups(curr_seq, out);
+        }
+    }
+
+    free_hashmap(clustered);
+}
+
+void insert_resize_dupe(clusterseq_s *self, clusterseq_s *dupe) { 
+    self->size_dup++;
+    
+    clusterseq_s **resized = realloc(self->dupes, sizeof(clusterseq_s) * self->size_dup);
+
+    if (!resized) {
+        printf("Error reallocating dupe array\n");
+        exit(139);
+    }
+
+    self->dupes = resized;
+    self->dupes[self->size_dup - 1] = dupe;
+    dupe->is_dup = 1;
+}
 
 hmsize_t hash_bits(uint64_t x) {
   hmsize_t low = (hmsize_t)x;
@@ -191,7 +255,7 @@ hm_s *new_hashmap() {
         exit(139);
     }
 
-    hm->vec_vec = (hmvalue_s*)calloc(1, sizeof(hmvalue_s));
+    hm->vec_vec = (cluster_s*)calloc(1, sizeof(cluster_s));
     hm->n = 0;
     hm->next_round = 0;
 
@@ -199,24 +263,24 @@ hm_s *new_hashmap() {
 
 }
 void init_hmv(hm_s *self, hmsize_t index, hmsize_t len_seq) {
-    self->vec_vec[index] = (hmvalue_s){.arr=malloc(sizeof(hm_node)), .len_seq=len_seq, .n=0};
+    self->vec_vec[index] = (cluster_s){.arr=malloc(sizeof(clusterseq_s)), .len_seq=len_seq, .n=0};
 }
 
-void resize_insert_hmn(hmn_t self, hmsize_t index, seq_t seq, char *seq_str, hmsize_t len, , size_t out_len) {
-    self[index - 1] = (hm_node){.seq = seq, .len_seq=len, .seq_str=seq_str, .len_out=out_len};   
+void resize_insert_hmn(clusterseqarr_t self, hmsize_t index, seq_t seq_packed, size_t out_len, size_t index_in_array) {
+    self[index - 1] = (clusterseq_s){.dupes=calloc(1, sizeof(clusterseq_s)), .seq_packed=seq_packed, .out_len=out_len, .size_dup=0, .index_in_array=index_in_array, .is_dup=0};   
 }
 
-void resize_insert_hmv(hmvalue_s *self, seq_t seq, char *seq_str, size_t out_len) {
+void resize_insert_hmv(cluster_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array) {
     self->n++;
-    self->arr = (hmn_t)realloc(self->arr, sizeof(hm_node) * self->n);
-    resize_insert_hmn(self->arr, self->n, seq, seq_str, self->len_seq, out_len);
+    self->arr = (clusterseqarr_t)realloc(self->arr, sizeof(clusterseq_s) * self->n);
+    resize_insert_hmn(self->arr, self->n, seq_packed, out_len, index_in_array);
 }
 
 void resize_hashmap(hm_s *self) {
     hmsize_t rounded_up = self->next_round = next_round_bits(self->n);
 
     if (rounded_up > self->n) {
-        hmvalue_s *p_new = (hmvalue_s*)realloc(self->vec_vec, rounded_up * sizeof(hmvalue_s));
+        cluster_s *p_new = (cluster_s*)realloc(self->vec_vec, rounded_up * sizeof(cluster_s));
         if (!p_new) {
             printf("Error reallocating hashmap value vector on heap to %hu\n", self->next_round);
             exit(139);
@@ -226,9 +290,13 @@ void resize_hashmap(hm_s *self) {
 }
 
 
-void free_hashmap_vec(hmvalue_s self) {
+void free_hashmap_node(clusterseq_s node) {
+    free(node.seq_packed);
+}
+
+void free_hashmap_vec(cluster_s self) {
     for (int i = 0; i < self.n; i++) {
-        free(self.arr[i].seq);
+        free_hashmap_node(self.arr[i]);
     }
 }
 
@@ -238,7 +306,7 @@ void free_hashmap(hm_s *self) {
     free(self);
 }
 
-void insert_into_hashmap(hm_s *self, uint64_t key, seq_t  value, char *seq_str, hmsize_t len_seq, size_t out_len) {
+void insert_into_hashmap(hm_s *self, uint64_t key, seq_t  seq_packed, size_t len_seq, size_t out_len, size_t index_in_array) {
     hmsize_t vec_index = hash_tuple_to_index(key, len_seq);
 
     if (self->n < vec_index) {
@@ -248,34 +316,32 @@ void insert_into_hashmap(hm_s *self, uint64_t key, seq_t  value, char *seq_str, 
         init_hmv(self, vec_index - 1, len_seq);
     }
 
-    resize_insert_hmv(&self->vec_vec[vec_index - 1], value, out_len);
+    resize_insert_hmv(&self->vec_vec[vec_index - 1], seq_packed, out_len, index_in_array);
 }
 
-hmvalue_s get_hashmap_value(hm_s *self, uint64_t key, hmsize_t len_seq) {
+cluster_s get_hashmap_value(hm_s *self, uint64_t key, hmsize_t len_seq) {
     size_t vec_index = hash_tuple_to_index(key, len_seq);
 
     return self->vec_vec[vec_index - 1];
 }
 
-void print_hmv(hmvalue_s hmv) {
-    for (int i = 0; i < hmv.n; i++) print_hmn(hmv.arr[i]);
-}
-void print_hmn(hm_node hmn) {
-    for (int i = 0; i < hmn.len_seq; i++) printf("%lu/%lx, ", hmn.seq[i], hmn.seq[i]);
-
-    printf("\n------\n");
-}
-
 int main() {
-    hm_s *hm = new_hashmap();
+    size_t len = 5;
 
-    uint64_t key = 0x010101ddeeff1142;
-    uint64_t seq[] = {0x010101ddeeff1142, 0xf10101ddeeff1e42, 0x010101ddeefe1143,  0x01e101fdefff1142};
+    char *in[] = {
+        "AATGTATG",
+        "AATGTATA",
+        "AATGTATG",
+        "AAATTGTATTTT",
+        "AAATTGTAATTA"
+    };
 
-    insert_into_hashmap(hm, key, seq, 4);
+    size_t out[len];
+    memset(out, 0, len * 4);
 
-    hmvalue_s v = get_hashmap_value(hm, key, 4);
+    cluster_ham_and_mark(in, len, out);
 
-    print_hmv(v);
+    for (size_t i = 0; i < len; ++i) printf("%lu\n", out[i]);
+
 
 }
