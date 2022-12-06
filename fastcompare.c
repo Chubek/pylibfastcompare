@@ -61,7 +61,7 @@ outtype_t pack_32_bytes_in_64_bits(chartype_t in[SIZE_CHARS]) {
 
 /* seq must be null-terminated */
 out_s pack_seq_into_64bit_integers(chartype_t *seq, size_t len_str) {
-    size_t size_padded = len_str + (len_str % SIZE_CHARS);
+    size_t size_padded = len_str < 32 ? 32 : next_round_bits32(len_str);
     size_t size_out = (size_padded / SIZE_CHARS) * sizeof(uint64_t);
 
     seq_t out = malloc(size_out);
@@ -232,19 +232,24 @@ void insert_resize_dupe(clusterseq_s *self, clusterseq_s *dupe) {
 hmsize_t hash_bits(uint64_t x) {
   hmsize_t low = (hmsize_t)x;
   hmsize_t high = (hmsize_t)(x >> HM_SHIFT);
-  return (hmsize_t)((A * low + B * high + C) >> HM_SHIFT);
+  return (hmsize_t)((A * low + B * high + C) >> HM_SHIFT) + 1;
 }
 
-hmsize_t next_round_bits(hmsize_t n) {
+hmsize_t next_round_bits32(hmsize_t n) {
     return ROUNDUP_32(n);
 }
 
+tuphash_t next_round_bits16(tuphash_t n) {
+    return ROUNDUP_16(n);
+}
 
-hmsize_t hash_tuple_to_index(uint64_t x, hmsize_t len) {
+tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len) {
     hmsize_t hash_x = hash_bits(x);
 
-    hmsize_t ret = (hmsize_t)((((hash_x ^ PYHASH_X) % PYHASH_REM1) ^ (PYHASH_X ^ (len >> 2))) % (PYHASH_REM2));
-    return ret; 
+    hmsize_t hashed = (hmsize_t)((((hash_x ^ PYHASH_X) % PYHASH_REM1) ^ (PYHASH_X ^ (len >> 2))) % (PYHASH_REM2));
+    tuphash_t low = (tuphash_t)hashed;
+    tuphash_t high = (tuphash_t)(hashed >> 16);    
+    return low ^ high; 
 }
 
 hm_s *new_hashmap() {
@@ -263,7 +268,7 @@ hm_s *new_hashmap() {
 
 }
 void init_hmv(hm_s *self, hmsize_t index, hmsize_t len_seq) {
-    self->vec_vec[index] = (cluster_s){.arr=malloc(sizeof(clusterseq_s)), .len_seq=len_seq, .n=0};
+    self->vec_vec[index] = (cluster_s){.arr=calloc(1, 1), .len_seq=len_seq, .n=0x00000000};
 }
 
 void resize_insert_hmn(clusterseqarr_t self, hmsize_t index, seq_t seq_packed, size_t out_len, size_t index_in_array) {
@@ -277,7 +282,8 @@ void resize_insert_hmv(cluster_s *self, seq_t seq_packed, size_t out_len, size_t
 }
 
 void resize_hashmap(hm_s *self) {
-    hmsize_t rounded_up = self->next_round = next_round_bits(self->n);
+    hmsize_t rounded_up = self->next_round = next_round_bits32(self->n);
+    if (rounded_up == 0) rounded_up = self->next_round = UINT16_MAX;
 
     if (rounded_up > self->n) {
         cluster_s *p_new = (cluster_s*)realloc(self->vec_vec, rounded_up * sizeof(cluster_s));
@@ -307,13 +313,13 @@ void free_hashmap(hm_s *self) {
 }
 
 void insert_into_hashmap(hm_s *self, uint64_t key, seq_t  seq_packed, size_t len_seq, size_t out_len, size_t index_in_array) {
-    hmsize_t vec_index = hash_tuple_to_index(key, len_seq);
+    tuphash_t vec_index = hash_tuple_to_index(key, len_seq);
 
     if (self->n < vec_index) {
         self->n = vec_index;
         resize_hashmap(self);
 
-        init_hmv(self, vec_index - 1, len_seq);
+        init_hmv(self, ((hmsize_t)vec_index) - 1, len_seq);
     }
 
     resize_insert_hmv(&self->vec_vec[vec_index - 1], seq_packed, out_len, index_in_array);

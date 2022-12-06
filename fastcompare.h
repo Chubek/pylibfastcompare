@@ -27,10 +27,12 @@
 
 
 #define ROUNDUP_32(x) (--(x), (x)|=(x)>>1, (x)|=(x)>>2, (x)|=(x)>>4, (x)|=(x)>>8, (x)|=(x)>>16, ++(x))
+#define ROUNDUP_16(x) (--(x), (x)|=(x)>>1, (x)|=(x)>>2, (x)|=(x)>>4, (x)|=(x)>>8, ++(x))
 
 typedef uint8_t chartype_t;
 typedef uint64_t outtype_t;
 typedef uint64_t hamtype_t;
+typedef uint16_t tuphash_t;
 typedef uint64_t* seq_t;
 typedef uint32_t hmsize_t;
 
@@ -59,8 +61,8 @@ typedef cluster_s* clusterarr_t;
 
 typedef struct HashMapSt {
     clusterarr_t vec_vec;
-    hmsize_t n;
-    hmsize_t next_round;
+    tuphash_t n;
+    tuphash_t next_round;
 } hm_s;
 
 int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM]);
@@ -76,8 +78,9 @@ out_s pack_seq_into_64bit_integers(chartype_t *seq, size_t len_str);
 void insert_seq_in_hm(hm_s *self, char *seq, size_t index_in_array);
 void hamming_cluster_single(cluster_s *cluster);
 hmsize_t hash_bits(uint64_t x);
-hmsize_t hash_tuple_to_index(uint64_t x, hmsize_t len);
-hmsize_t next_round_bits(hmsize_t n);
+tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len);
+hmsize_t next_round_bits32(hmsize_t n);
+tuphash_t next_round_bits16(tuphash_t n);
 hm_s *cluster_seqs(char **seqs_in, size_t num_seqs);
 void insert_resize_dupe(clusterseq_s *self, clusterseq_s *dupe);
 int hamming_hseq_pair(clusterseq_s a, clusterseq_s b);
