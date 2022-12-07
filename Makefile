@@ -34,7 +34,7 @@ libfastcompare:
 	$(CC) $(CFLAGS) $(main_filename)
 
 clean:
-	rm -f $(target_so)
+	~rm -f $(target_so) || true
 
 standalone:
 	$(CC) $(arch) -ggdb $(main_filename)
