@@ -2,30 +2,37 @@
 
 ## Compiling
 
-An install script has been provided for you. 
+You can run `install.sh` to install compile the library dynamically. Either using GCC or Clang.
+
+The script accepts two flas `-i` and `-c`. `-c` can either be `clang` or `gcc`. `-i` does not have a value but if you pass it, then `clean` directive won't run.
+
+The script will echo your options.
+
 Run it like this:
 
 ```
-sh ./install.sh <compiler> <init?>
+bash ./install.sh -i -c gcc
 ```
 
-`<compler>` can be either `gcc` or `clang`. This will compile in either using the `-mavx2` flag which both share. Your CPU must support AVX2.
-
-For example `sh ./install.sh gcc`
-
-`<init>` is an optional argument. If passed, it won't run `clean` directive. Some distros have issues with removing files that don't exist. So if `libfastcompare.so` does not exist in your directory, run it like this:
+or 
 
 ```
-sh ./install.sh gcc init
+bash ./install.sh -c clang
 ```
 
-The scripts prompts for password because `make install` requires sudo privileges. To avoid having to enter password over and over again do this ONCE:
+Or simply 
+
+```
+bash ./install.sh
+```
+
+Remember that a shebang has been added to the script. It won't run with `sh`. you will have to run it with `bash`. Either that or do this ONCE:
 
 ```
 sudo chmod +x ./install.sh
 ```
 
-And then you can run it without `sh` and it will not prompt anymore.
+Then run it with no issue. Script needs sudo at some point so this will fix it.
 
 ## Building FFI
 
