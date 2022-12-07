@@ -117,7 +117,7 @@ int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM]) {
     int diff = 0;
     uint8_t c;
 
-    _mm256_storeu_epi8((__m256i*)&v[0], xord);
+    _mm256_storeu_si256((__m256i*)&v[0], xord);
 
     for (size_t i = 0; i < 32; i++) {
         c = v[i];
