@@ -31,8 +31,8 @@ void encode_gatacca(chartype_t in[SIZE_CHARS], outtype_t out[SIZE_OUT]) {
     __m256i sl_nums = _mm256_setr_epi64x(0, 2, 4, 6);
     __m256i loaded_array = _mm256_loadu_si256((__m256i *)&in[0]);
 
-    __m256i loaded_array_shifted_right =  _mm256_srai_epi16(loaded_array, 1);
-;   __m256i loaded_array_anded = _mm256_and_si256(loaded_array_shifted_right, all_threes);
+    __m256i loaded_array_shifted_right =  _mm256_srai_epi16(loaded_array, 1);   
+    __m256i loaded_array_anded = _mm256_and_si256(loaded_array_shifted_right, all_threes);
     __m256i loaded_array_shifted_left = _mm256_sllv_epi64(loaded_array_anded, sl_nums);
 
   
@@ -64,6 +64,10 @@ out_s pack_seq_into_64bit_integers(chartype_t *seq, size_t len_str) {
     size_t size_padded = len_str < 32 ? 32 : next_round_bits32(len_str);
     size_t size_out = (size_padded / SIZE_CHARS) * sizeof(uint64_t);
 
+    char seq_padded[size_padded];
+    memset(seq_padded, 'A', size_padded);
+    for (size_t i = 0; i < len_str; ++i) seq_padded[i] = seq[i];
+
     seq_t out = malloc(size_out);
     memset(out, 0, size_out);
 
@@ -71,7 +75,7 @@ out_s pack_seq_into_64bit_integers(chartype_t *seq, size_t len_str) {
     chartype_t in[SIZE_CHARS];
     for (size_t i = 0; i < size_padded; i += SIZE_CHARS) {
         memset(in, 0, SIZE_CHARS * sizeof(chartype_t));
-        memcpy(in, &seq[i], SIZE_CHARS * sizeof(chartype_t));
+        memcpy(in, &seq_padded[i], SIZE_CHARS * sizeof(chartype_t));
 
         out[j++] = pack_32_bytes_in_64_bits(in);
     }
@@ -144,7 +148,9 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b) {
     return diff;
 }
 
-void hamming_cluster_single(cluster_s *cluster) {
+void *hamming_cluster_single(void *cluster_ptr) {
+    cluster_s *cluster = (cluster_s *)cluster_ptr;
+   
     clusterseqarr_t cluster_seqs = cluster->arr;
     hmsize_t cluster_size = cluster->n;
     int diff = 0;
@@ -173,16 +179,21 @@ void hamming_cluster_single(cluster_s *cluster) {
 }
 
 /* seq must be null-terminated */
-void hamming_clusters_hm(hm_s *clustered) {
-    cluster_s *curr_cluster;
+void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size) {
+    pthread_t threads[size];
+    memset(threads, 0, size * sizeof(pthread_t));
+    
+    hmsize_t max = size;
 
-    for (hmsize_t i = 0; i < clustered->n; ++i) {
-        curr_cluster = &clustered->vec_vec[i];
-        hamming_cluster_single(curr_cluster);         
+    printf("Creating threads for each cluster...\n");
+    for (hmsize_t i = 0; i < size; ++i) {
+        pthread_create(&threads[i], NULL, &hamming_cluster_single, &non_zero_clusters[i]);
     }
+
+    for (hmsize_t i = 0; i < size; i++) pthread_join(threads[i], NULL);
 }
 
-void iterate_and_mark_dups(clusterseq_s lead, size_t out[]) {
+void iterate_and_mark_dups(clusterseq_s lead, int out[]) {
     if (lead.is_dup) return;
 
     size_t lead_index = lead.index_in_array;
@@ -194,15 +205,12 @@ void iterate_and_mark_dups(clusterseq_s lead, size_t out[]) {
     }
 }
 
-void cluster_ham_and_mark(char **seqs, size_t num_seqs, size_t out[]) {
-    hm_s *clustered = cluster_seqs(seqs, num_seqs);
-    hamming_clusters_hm(clustered);
-
-    clusterarr_t clusters_arr = clustered->vec_vec;
+void mark_out(clusterarr_t clusters_arr, tuphash_t size, int out[]) {
     clusterseqarr_t curr_cluster_arr;
     clusterseq_s curr_seq;
 
-    for (hmsize_t i = 0; i < clustered->n; ++i) {
+    for (hmsize_t i = 0; i < size; ++i) {
+        if (clusters_arr[i].n < 2) continue;
         curr_cluster_arr = clusters_arr[i].arr;
 
         for (hmsize_t j = 0; j < clusters_arr[i].n; ++j) {
@@ -210,7 +218,34 @@ void cluster_ham_and_mark(char **seqs, size_t num_seqs, size_t out[]) {
             iterate_and_mark_dups(curr_seq, out);
         }
     }
+}
 
+non_zero_clusters_s filter_out_zero_clusters(clusterarr_t clusters, tuphash_t size) {
+    clusterarr_t ret = calloc(1, 1);
+    size_t non_zero = 0;
+
+    for (tuphash_t i = 0; i < size; i++) {
+        if (clusters[i].n < 2) continue;
+
+        non_zero++;
+        ret = realloc(ret, non_zero * sizeof(cluster_s));
+        ret[non_zero - 1] = clusters[i];
+    }
+
+    return (non_zero_clusters_s){.clusters=ret, .size=non_zero};
+}
+
+void cluster_ham_and_mark(char **seqs, size_t num_seqs, int out[]) {
+    printf("Clustering...\n");
+    hm_s *clustered = cluster_seqs(seqs, num_seqs);
+    printf("Done, getting non-szero clusters...\n");
+    non_zero_clusters_s non_zeroes = filter_out_zero_clusters(clustered->vec_vec, clustered->n);
+    printf("Doing hamming...\n");
+    hamming_clusters_hm(non_zeroes.clusters, non_zeroes.size);
+    printf("Markint the results...\n");
+    mark_out(non_zeroes.clusters, non_zeroes.size, out);
+    
+    printf("Fully done!\n");
     free_hashmap(clustered);
 }
 
@@ -246,10 +281,8 @@ tuphash_t next_round_bits16(tuphash_t n) {
 tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len) {
     hmsize_t hash_x = hash_bits(x);
 
-    hmsize_t hashed = (hmsize_t)((((hash_x ^ PYHASH_X) % PYHASH_REM1) ^ (PYHASH_X ^ (len >> 2))) % (PYHASH_REM2));
-    tuphash_t low = (tuphash_t)hashed;
-    tuphash_t high = (tuphash_t)(hashed >> 16);    
-    return low ^ high; 
+    hmsize_t hashed = (tuphash_t)((((hash_x ^ PYHASH_X) % PYHASH_REM1) ^ (PYHASH_X ^ (len >> 2))) % (PYHASH_REM2));
+    return (hashed % HASH_MAX) + 1; 
 }
 
 hm_s *new_hashmap() {
@@ -267,8 +300,8 @@ hm_s *new_hashmap() {
     return hm;
 
 }
-void init_hmv(hm_s *self, hmsize_t index, hmsize_t len_seq) {
-    self->vec_vec[index] = (cluster_s){.arr=calloc(1, 1), .len_seq=len_seq, .n=0x00000000};
+void init_hmv(hm_s *self, tuphash_t index, hmsize_t len_seq) {
+    self->vec_vec[index] = (cluster_s){.arr=malloc(sizeof(clusterseq_s)), .len_seq=len_seq, .n=0x00000000, .hash=index + 1};
 }
 
 void resize_insert_hmn(clusterseqarr_t self, hmsize_t index, seq_t seq_packed, size_t out_len, size_t index_in_array) {
@@ -277,7 +310,8 @@ void resize_insert_hmn(clusterseqarr_t self, hmsize_t index, seq_t seq_packed, s
 
 void resize_insert_hmv(cluster_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array) {
     self->n++;
-    self->arr = (clusterseqarr_t)realloc(self->arr, sizeof(clusterseq_s) * self->n);
+    size_t new_len = sizeof(clusterseq_s) * self->n;
+    self->arr = (clusterseqarr_t)realloc(self->arr, new_len);
     resize_insert_hmn(self->arr, self->n, seq_packed, out_len, index_in_array);
 }
 
@@ -314,12 +348,11 @@ void free_hashmap(hm_s *self) {
 
 void insert_into_hashmap(hm_s *self, uint64_t key, seq_t  seq_packed, size_t len_seq, size_t out_len, size_t index_in_array) {
     tuphash_t vec_index = hash_tuple_to_index(key, len_seq);
-
     if (self->n < vec_index) {
         self->n = vec_index;
         resize_hashmap(self);
 
-        init_hmv(self, ((hmsize_t)vec_index) - 1, len_seq);
+        init_hmv(self, vec_index - 1, len_seq);
     }
 
     resize_insert_hmv(&self->vec_vec[vec_index - 1], seq_packed, out_len, index_in_array);
@@ -329,25 +362,4 @@ cluster_s get_hashmap_value(hm_s *self, uint64_t key, hmsize_t len_seq) {
     size_t vec_index = hash_tuple_to_index(key, len_seq);
 
     return self->vec_vec[vec_index - 1];
-}
-
-int main() {
-    size_t len = 5;
-
-    char *in[] = {
-        "AATGTATG",
-        "AATGTATA",
-        "AATGTATG",
-        "AAATTGTATTTT",
-        "AAATTGTAATTA"
-    };
-
-    size_t out[len];
-    memset(out, 0, len * 4);
-
-    cluster_ham_and_mark(in, len, out);
-
-    for (size_t i = 0; i < len; ++i) printf("%lu\n", out[i]);
-
-
 }
