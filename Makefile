@@ -1,7 +1,7 @@
 main_filename := fastcompare.c
 header_filename := fastcompare.h
 target_so := libfastcompare.so
-arch := -march=native
+arch := $(ARCH)
 
 CC = gcc
 CFLAGS = $(arch) -shared -o $(target_so) -fPIC
