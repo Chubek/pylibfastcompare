@@ -3,7 +3,7 @@ header_filename := fastcompare.h
 target_so := libfastcompare.so
 arch := $(ARCH)
 
-CC = gcc
+CC = $(COMP)
 CFLAGS = $(arch) -shared -o $(target_so) -fPIC
 
 
