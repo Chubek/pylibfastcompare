@@ -1,3 +1,3 @@
-make ARCH=-mavx2 COMP=gcc
+make $2 COMP=$1
 sudo make install
 python3 ffi.py

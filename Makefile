@@ -1,7 +1,7 @@
 main_filename := fastcompare.c
 header_filename := fastcompare.h
 target_so := libfastcompare.so
-arch := $(ARCH)
+arch := -mavx2
 
 CC = $(COMP)
 CFLAGS = $(arch) -shared -o $(target_so) -fPIC
@@ -12,6 +12,7 @@ ifeq ($(PREFIX),)
 endif
 
 all: clean libfastcompare setenv
+init: libfastcompare setenv
 install: install_op install_ldc
 
 setenv:
@@ -34,7 +35,7 @@ libfastcompare:
 	$(CC) $(CFLAGS) $(main_filename)
 
 clean:
-	~rm -f $(target_so) || true
+	rm -f $(target_so)
 
 standalone:
 	$(CC) $(arch) -ggdb $(main_filename)
