@@ -12,30 +12,18 @@ from _fastcompare import lib
 
 ffi = cffi.FFI()
 
-def worker_encoder(list_in: Tuple[str, str], out: List[Tuple[Tuple[str, str], str]]):
-    for header, seq in list_in:
-        out.append(((seq, header), ffi.new("char[]", (seq.encode('ascii') + '\0'.encode('ascii')))))
-
+    
 def seqs_bytes(
     path: str,
     thread_div: int
 ) -> Tuple[List[Tuple[Tuple[str, str], bytearray]], int]:
     list_bytes = []
-    rec_reader = list(SimpleFastaParser(open(path, "r")))
-    size = len(rec_reader)
+    rec_reader = SimpleFastaParser(open(path, "r"))
     
-    print(f"Thread count is length_of_seqs // {thread_div} = {size / thread_div}")
+    for header, seq in rec_reader:
+        list_bytes.append(((seq, header), ffi.new("char[]", (seq.encode('ascii') + '\0'.encode('ascii')))))
 
-    thrds = []
-    for i in range(0, size, size // thread_div):
-        portion = rec_reader[i:i + (size // thread_div)]
-        t = Thread(target=worker_encoder, args=(portion, list_bytes, ))
-        thrds.append(t)
-        t.start()
-
-    [t.join() for t in thrds]
-
-    return list_bytes, size
+    return list_bytes, len(list_bytes)
 
 def assembler_worker(size: int, start: int, end: int, heads_seqs: List[Tuple[str, str]], arr_in: List[int], dict_out: Dict[str, Dict[str, str]]): 
     for i in range(start, end):
