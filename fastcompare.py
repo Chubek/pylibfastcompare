@@ -21,7 +21,7 @@ def seqs_bytes(
     rec_reader = SimpleFastaParser(open(path, "r"))
     
     for header, seq in rec_reader:
-        list_bytes.append(((seq, header), ffi.new("char[]", (seq.encode('ascii') + '\0'.encode('ascii')))))
+        list_bytes.append(((header, seq), ffi.new("char[]", (seq.encode('ascii') + '\0'.encode('ascii')))))
 
     return list_bytes, len(list_bytes)
 
@@ -33,10 +33,10 @@ def assembler_worker(size: int, start: int, end: int, heads_seqs: List[Tuple[str
         res = arr_in[i]
 
         if res == -1:
-            dict_out["Clean"][h] = {"Headr": h, "Seq": s}
+            dict_out["Clean"][h] = s
         else:
             h_master, _ = heads_seqs[res]
-            dict_out["Dupes"][h] = {"Header": h, "Seq": s, "Master": h_master}
+            dict_out["Dupes"][h] = {"Seq": s, "Master": h_master}
 
 
 def run_libfastcompare(path: str, thread_div: int):
