@@ -38,4 +38,4 @@ clean:
 	rm -f $(target_so)
 
 standalone:
-	$(CC) $(arch) -ggdb $(main_filename)
+	gcc -mavx2 -ggdb $(main_filename)

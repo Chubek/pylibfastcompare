@@ -5,6 +5,18 @@
 #include <immintrin.h>
 #include <pthread.h>
 
+#define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c\n"
+#define BYTE_TO_BINARY(byte)  \
+  (byte & 0x80 ? '1' : '0'), \
+  (byte & 0x40 ? '1' : '0'), \
+  (byte & 0x20 ? '1' : '0'), \
+  (byte & 0x10 ? '1' : '0'), \
+  (byte & 0x08 ? '1' : '0'), \
+  (byte & 0x04 ? '1' : '0'), \
+  (byte & 0x02 ? '1' : '0'), \
+  (byte & 0x01 ? '1' : '0') 
+
+
 #define ALPHA_SIZE 4
 #define CHAR_TO_IND(c) (((c == 'A') ? 0 : (c == 'C' ? 1 : (c == 'G' ? 2 : (c == 'T' || c == 'U' ? 3 : -1)))));
 #define BUFFER_MAX 6000
@@ -20,6 +32,8 @@
 #define B 0x930233fdaa39ffdd
 #define C 0x112309df9edf91df
 #define HM_SHIFT 32
+#define PRIME_8_ONE 101
+#define PRIME_8_TWO 25
 
 #define HASH_MAX 120000
 #define SZ_MAX 256
@@ -78,16 +92,16 @@ void reduce_integer_or_op(outtype_t in, outtype_t *reducer);
 void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size);
 void iterate_and_mark_dups(clusterseq_s lead, int out[]);
 void encode_gatacca(chartype_t in[SIZE_CHARS], outtype_t out[SIZE_OUT]);
-void cluster_ham_and_mark(char **seqs, size_t num_seqs, int out[]);
+void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[]);
 outtype_t pack_32_bytes_in_64_bits(chartype_t in[SIZE_CHARS]);
 out_s pack_seq_into_64bit_integers(chartype_t *seq, size_t len_str);
-void insert_seq_in_hm(hm_s *self, char *seq, size_t index_in_array);
+void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k);
 non_zero_clusters_s filter_out_zero_clusters(clusterarr_t clusters, tuphash_t size);
 hmsize_t hash_bits(uint64_t x);
 tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len);
 hmsize_t next_round_bits32(hmsize_t n);
 tuphash_t next_round_bits16(tuphash_t n);
-hm_s *cluster_seqs(char **seqs_in, size_t num_seqs);
+hm_s *cluster_seqs(chartype_t **seqs_in, size_t num_seqs, int k);
 void insert_resize_dupe(clusterseq_s *self, clusterseq_s *dupe);
 int hamming_hseq_pair(clusterseq_s a, clusterseq_s b);
 hm_s *new_hashmap();
