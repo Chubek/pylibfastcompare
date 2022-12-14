@@ -390,6 +390,11 @@ non_zero_clusters_s filter_out_zero_clusters(clusterarr_t clusters, tuphash_t si
 
 void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
 {
+    printf("Bytes in i8/u8: %lu/%lu\n", sizeof(int8_t), sizeof(uint8_t));
+    printf("Bytes in i16/u16: %lu/%lu\n", sizeof(int16_t), sizeof(uint16_t));
+    printf("Bytes in i32/u32: %lu/%lu\n", sizeof(int32_t), sizeof(uint32_t));
+    printf("Bytes in i64/u64: %lu/%lu\n", sizeof(int64_t), sizeof(uint64_t));
+    printf("----\n");
     printf("Clustering...\n");
     hm_s *clustered = cluster_seqs(seqs, num_seqs, k);
     printf("Done, getting non-szero clusters...\n");
