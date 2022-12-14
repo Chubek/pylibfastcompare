@@ -11,8 +11,8 @@ ifeq ($(PREFIX),)
     PREFIX := /usr/local
 endif
 
-all: clean libfastcompare setenv
-init: libfastcompare setenv
+all: clean install_header libfastcompare setenv
+init: install_header libfastcompare setenv
 install: install_op install_ldc
 
 setenv:
@@ -27,9 +27,10 @@ install_ldc:
 install_op: libfastcompare.so
 	install -d $(DESTDIR)$(PREFIX)/lib/
 	install -m 644 $(target_so) $(DESTDIR)$(PREFIX)/lib/
-	install -d $(DESTDIR)$(PREFIX)/include/
-	install -m 644 $(header_filename) $(DESTDIR)$(PREFIX)/include/
-	
+
+install_header:
+	mkdir -p $(DESTDIR)$(PREFIX)/include/
+	cp ./$(header_filename) $(DESTDIR)$(PREFIX)/include/$(header_filename)	
 
 libfastcompare:
 	$(CC) $(CFLAGS) $(main_filename)
