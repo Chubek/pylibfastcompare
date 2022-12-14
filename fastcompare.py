@@ -36,7 +36,7 @@ def assembler_worker(size: int, start: int, end: int, heads_seqs: List[Tuple[str
             dict_out["Clean"][h] = s
         else:
             h_master, _ = heads_seqs[res]
-            dict_out["Dupes"][h] = s
+            dict_out["Dupes"][h] = {"Seq": s, "Master": h_master}
 
 
 def run_libfastcompare(path: str, thread_div: int):
