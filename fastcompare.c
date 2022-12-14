@@ -327,8 +327,12 @@ void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
         pthread_create(&threads[i], NULL, &hamming_cluster_single, &non_zero_clusters[i]);
     }
 
-    for (hmsize_t i = 0; i < size; i++)
+    for (hmsize_t i = 0; i < size; i++) {
         pthread_join(threads[i], NULL);
+        printf("Thread: `%u` joined; ", i);
+    }
+
+    printf("\n");
 }
 
 void iterate_and_mark_dups(clusterseq_s lead, int out[])
@@ -379,6 +383,7 @@ non_zero_clusters_s filter_out_zero_clusters(clusterarr_t clusters, tuphash_t si
         ret = realloc(ret, non_zero * sizeof(cluster_s));
         ret[non_zero - 1] = clusters[i];
     }
+    printf("Got %lu non-zero threads\n", non_zero);
 
     return (non_zero_clusters_s){.clusters = ret, .size = non_zero};
 }

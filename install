@@ -17,6 +17,6 @@ then
     echo "init enabled, rm will not run"
 fi
 
-sudo make $init COMP=$cc
+make $init COMP=$cc
 sudo make install
 python3 ffi.py
