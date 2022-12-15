@@ -133,10 +133,18 @@ void get_freq_value(chartype_t *in, int size_in, int uint8_freqs[256]) {
 uint64_t merge_freqs(int freqs[256]) {
     uint64_t key = 0;
 
-    for (int i = 0; i < 256; i++) key += freqs[i];
-    key /= 5;
 
-    printf(" = %lu, \n", key);
+    int sum = 0;
+    int non_zero_num = 1;
+    for (int i = 0; i < 256; i++) {
+        if (freqs[i] == 0) continue;        
+        sum += freqs[i];
+        non_zero_num += 1;
+    }
+
+    key = sum / non_zero_num;
+
+    key <<= 16;
 
     return key;
 }
@@ -148,8 +156,6 @@ uint64_t get_kmer_key(chartype_t *seq, int len_seq, int k)
     memset(out, 0, size_out);
 
     get_kmers(seq, out, len_seq, k);
-
-    printf("%s ", seq);
 
     int freqs[256];
     get_freq_value(out, size_out, freqs);
@@ -532,9 +538,7 @@ void free_hashmap(hm_s *self)
 void insert_into_hashmap(hm_s *self, uint64_t key, seq_t seq_packed, size_t len_seq, size_t out_len, size_t index_in_array)
 {
     tuphash_t vec_index = hash_tuple_to_index(key, len_seq);
-    
-    printf("%lu %u\n", key, vec_index);
-    
+     
     if (self->n < vec_index)
     {
         self->n = vec_index;
