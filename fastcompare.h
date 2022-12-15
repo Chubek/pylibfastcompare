@@ -5,6 +5,8 @@
 #include <immintrin.h>
 #include <pthread.h>
 
+#define K 4
+
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c\n"
 #define BYTE_TO_BINARY(byte)  \
   (byte & 0x80 ? '1' : '0'), \

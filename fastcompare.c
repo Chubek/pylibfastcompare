@@ -59,46 +59,47 @@ void quicksort(chartype_t *in, int curr_l, int curr_h)
     }
 }
 
-chartype_t pack_4_bytes_into_1_byte(chartype_t b1, chartype_t b2, chartype_t b3, chartype_t b4)
-{
-    chartype_t b11 = (3 & (b1 >> 1)) << 0;
-    chartype_t b21 = (3 & (b2 >> 1)) << 2;
-    chartype_t b31 = (3 & (b3 >> 1)) << 4;
-    chartype_t b41 = (3 & (b4 >> 1)) << 6;
 
-    chartype_t res = b11 | b21 | b31 | b41;
-    return res;
+chartype_t pack_1_byte_into_8_bits(chartype_t enc1, chartype_t enc2, chartype_t enc3, chartype_t enc4) {
+    chartype_t enc2_sld = enc2 << 2;
+    chartype_t enc3_sld = enc3 << 4;
+    chartype_t enc4_sld = enc4 << 6;
+
+    return enc1 | enc2 | enc3 | enc4;
 }
 
-void and_immintrin(chartype_t inn[], int overall_start_point, int start_point, int size, int k, chartype_t out[])
-{
-    __m256i in = _mm256_loadu_si256((__m256i *)&inn[0]);
 
-    chartype_t to_be_anded[32];
-    memset(to_be_anded, 0, 32);
-    for (int i = start_point; i < start_point + k; i++)
-        to_be_anded[i] = 0xff;
-    __m256i and_candidate = _mm256_loadu_si256((__m256i *)&to_be_anded[0]);
-    __m256i anded_arr = _mm256_and_si256(in, and_candidate);
+void encode_to_0123(chartype_t in[32], chartype_t out[32]) {
+    __m256i three = _mm256_set1_epi8(3);
 
-    chartype_t v[32];
-    chartype_t v2[32];
-    _mm256_storeu_si256((__m256i *)&v[0], anded_arr);
-    _mm256_storeu_si256((__m256i *)&v2[0], in);
+    __m256i loaded_sri = _mm256_loadu_si256((__m256i*)&in[0]);
 
-    for (int i = start_point; i < start_point + k; i += 4)
-    {
-        chartype_t res = pack_4_bytes_into_1_byte(v[i + 0], v[i + 1], v[i + 2], v[i + 3]);
-        out[(overall_start_point + start_point) / k] ^= res;
-    }
+    __m256i srd = _mm256_srai_epi16(loaded_sri, 1);
+    __m256i andd = _mm256_and_si256(srd, three);
+
+    _mm256_storeu_si256((__m256i*)&out[0], andd);
 }
 
 void and_buffer(chartype_t buffer[SIZE_CHARS], chartype_t out[], int starting_point, int size, int k)
 {
+    chartype_t enc1;
+    chartype_t enc2;
+    chartype_t enc3;
+    chartype_t enc4;
+    
+    chartype_t out_buffer[32];
+    memset(out_buffer, 0, 32);
+    
+    encode_to_0123(buffer, out_buffer);
 
     for (int i = 0; i < SIZE_CHARS; i += k)
-    {
-        and_immintrin(buffer, starting_point, i, size, k, out);
+    {                
+        enc1 = out_buffer[i];
+        enc2 = out_buffer[i + 1];
+        enc3 = out_buffer[i + 2];
+        enc3 = out_buffer[i + 3];
+
+        out[(starting_point + i) / k] = pack_1_byte_into_8_bits(enc1, enc2, enc3, enc4);
     }
 }
 
@@ -121,17 +122,23 @@ void get_kmers(chartype_t *in, chartype_t out[], int size, int k)
     }
 }
 
-uint64_t pack_kmers_into_8_bytes(chartype_t kmers[], int size)
-{
-    uint64_t packed = 0;
-
-    quicksort(kmers, 0, size - 1);
-    for (int i = 0; i < 16; i += 2)
-    {
-        packed |= kmers[i] << i;
+void get_freq_value(chartype_t *in, int size_in, int uint8_freqs[256]) {
+    memset(uint8_freqs, 0, 256 * 4);
+    
+    for (int i = 0; i < size_in; i++) {
+        uint8_freqs[in[i]] += 1;
     }
+}
 
-    return packed;
+uint64_t merge_freqs(int freqs[256]) {
+    uint64_t key = 0;
+
+    for (int i = 0; i < 256; i++) key += freqs[i];
+    key /= 5;
+
+    printf(" = %lu, \n", key);
+
+    return key;
 }
 
 uint64_t get_kmer_key(chartype_t *seq, int len_seq, int k)
@@ -142,7 +149,12 @@ uint64_t get_kmer_key(chartype_t *seq, int len_seq, int k)
 
     get_kmers(seq, out, len_seq, k);
 
-    return pack_kmers_into_8_bytes(out, size_out);
+    printf("%s ", seq);
+
+    int freqs[256];
+    get_freq_value(out, size_out, freqs);
+
+    return merge_freqs(freqs);
 }
 
 void encode_gatacca(chartype_t in[SIZE_CHARS], outtype_t out[SIZE_OUT])
@@ -178,7 +190,6 @@ outtype_t pack_32_bytes_in_64_bits(chartype_t in[SIZE_CHARS])
     encode_gatacca(in, out);
 
     return out[0] | out[1] | out[2] | out[3];
-    ;
 }
 
 /* seq must be null-terminated */
@@ -390,13 +401,8 @@ non_zero_clusters_s filter_out_zero_clusters(clusterarr_t clusters, tuphash_t si
 
 void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
 {
-    printf("Bytes in i8/u8: %lu/%lu\n", sizeof(int8_t), sizeof(uint8_t));
-    printf("Bytes in i16/u16: %lu/%lu\n", sizeof(int16_t), sizeof(uint16_t));
-    printf("Bytes in i32/u32: %lu/%lu\n", sizeof(int32_t), sizeof(uint32_t));
-    printf("Bytes in i64/u64: %lu/%lu\n", sizeof(int64_t), sizeof(uint64_t));
-    printf("----\n");
     printf("Clustering...\n");
-    hm_s *clustered = cluster_seqs(seqs, num_seqs, k);
+    hm_s *clustered = cluster_seqs(seqs, num_seqs, K);
     printf("Done, getting non-szero clusters...\n");
     non_zero_clusters_s non_zeroes = filter_out_zero_clusters(clustered->vec_vec, clustered->n);
     printf("Doing hamming...\n");
@@ -526,6 +532,9 @@ void free_hashmap(hm_s *self)
 void insert_into_hashmap(hm_s *self, uint64_t key, seq_t seq_packed, size_t len_seq, size_t out_len, size_t index_in_array)
 {
     tuphash_t vec_index = hash_tuple_to_index(key, len_seq);
+    
+    printf("%lu %u\n", key, vec_index);
+    
     if (self->n < vec_index)
     {
         self->n = vec_index;
