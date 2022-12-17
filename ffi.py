@@ -8,7 +8,8 @@ ffi.cdef("""
     #define BUFFER_MAX 6000
     #define SIZE_CHARS 32
     #define SIZE_OUT 4
-    #define SIZE_HAM 4
+    #define SIZE_HAM 32
+
 
     #define PYHASH_X 0x345678
     #define PYHASH_REM2 0xfffffffb
@@ -28,10 +29,11 @@ ffi.cdef("""
 
     typedef uint8_t chartype_t;
     typedef uint64_t outtype_t;
-    typedef uint64_t hamtype_t;
+    typedef uint8_t hamtype_t;
     typedef uint32_t tuphash_t;
-    typedef uint64_t* seq_t;
+    typedef uint8_t* seq_t;
     typedef uint32_t hmsize_t;
+
 
     typedef struct OutStruct {
         seq_t out;
@@ -69,15 +71,12 @@ ffi.cdef("""
     } non_zero_clusters_s;
 
 
+        
     int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM]);
     void *hamming_cluster_single(void *cluster_ptr);
-    void reduce_integer_or_op(outtype_t in, outtype_t *reducer);
     void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size);
     void iterate_and_mark_dups(clusterseq_s lead, int out[]);
-    void encode_gatacca(chartype_t in[SIZE_CHARS], outtype_t out[SIZE_OUT]);
     void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[]);
-    outtype_t pack_32_bytes_in_64_bits(chartype_t in[SIZE_CHARS]);
-    out_s pack_seq_into_64bit_integers(chartype_t *seq, size_t len_str);
     void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k);
     non_zero_clusters_s filter_out_zero_clusters(clusterarr_t clusters, tuphash_t size);
     hmsize_t hash_bits(uint64_t x);

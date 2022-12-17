@@ -65,7 +65,7 @@ chartype_t pack_1_byte_into_8_bits(chartype_t enc1, chartype_t enc2, chartype_t 
     chartype_t enc3_sld = enc3 << 4;
     chartype_t enc4_sld = enc4 << 6;
 
-    return enc1 | enc2 | enc3 | enc4;
+    return enc1 | enc2_sld | enc3_sld | enc4_sld;
 }
 
 
@@ -77,7 +77,7 @@ void encode_to_0123(chartype_t in[32], chartype_t out[32]) {
     __m256i srd = _mm256_srai_epi16(loaded_sri, 1);
     __m256i andd = _mm256_and_si256(srd, three);
 
-    _mm256_storeu_si256((__m256i*)&out[0], andd);
+    _mm256_storeu_si256((__m256i*)&out[0], andd);   
 }
 
 void and_buffer(chartype_t buffer[SIZE_CHARS], chartype_t out[], int starting_point, int size, int k)
@@ -97,8 +97,7 @@ void and_buffer(chartype_t buffer[SIZE_CHARS], chartype_t out[], int starting_po
         enc1 = out_buffer[i];
         enc2 = out_buffer[i + 1];
         enc3 = out_buffer[i + 2];
-        enc3 = out_buffer[i + 3];
-
+        enc4 = out_buffer[i + 3];
         out[(starting_point + i) / k] = pack_1_byte_into_8_bits(enc1, enc2, enc3, enc4);
     }
 }
@@ -116,14 +115,14 @@ void get_kmers(chartype_t *in, chartype_t out[], int size, int k)
     for (int i = 0; i < size; i += 32)
     {
         memset(buffer, 0, 32);
-        memcpy(buffer, &in[i], 32);
+        for (int j = 0; j < 32; j++) buffer[j] = in[j + i];
 
         and_buffer(buffer, out, i, size, k);
     }
 }
 
 void get_freq_value(chartype_t *in, int size_in, int uint8_freqs[256]) {
-    memset(uint8_freqs, 0, 256 * 4);
+    memset(uint8_freqs, 0, 256 * sizeof(int));
     
     for (int i = 0; i < size_in; i++) {
         uint8_freqs[in[i]] += 1;
@@ -149,90 +148,22 @@ uint64_t merge_freqs(int freqs[256]) {
     return key;
 }
 
-uint64_t get_kmer_key(chartype_t *seq, int len_seq, int k)
-{
-    int size_out = (len_seq / k) + ((len_seq / k) % 16);
-    chartype_t out[size_out];
-    memset(out, 0, size_out);
-
-    get_kmers(seq, out, len_seq, k);
-
+uint64_t get_kmer_key(seq_t out, int size_out, int k){
     int freqs[256];
     get_freq_value(out, size_out, freqs);
-
     return merge_freqs(freqs);
-}
-
-void encode_gatacca(chartype_t in[SIZE_CHARS], outtype_t out[SIZE_OUT])
-{
-    __m256i all_threes = _mm256_set1_epi8(3);
-    __m256i sl_nums = _mm256_setr_epi64x(0, 2, 4, 6);
-    __m256i loaded_array = _mm256_loadu_si256((__m256i *)&in[0]);
-
-    __m256i loaded_array_shifted_right = _mm256_srai_epi16(loaded_array, 1);
-    __m256i loaded_array_anded = _mm256_and_si256(loaded_array_shifted_right, all_threes);
-    __m256i loaded_array_shifted_left = _mm256_sllv_epi64(loaded_array_anded, sl_nums);
-
-    outtype_t v[SIZE_OUT];
-
-    _mm256_storeu_si256((__m256i *)&v[0], loaded_array_shifted_left);
-
-    for (int i = 0; i < SIZE_OUT; i++)
-    {
-        out[i] = v[i];
-    }
-}
-
-void reduce_integer_or_op(outtype_t in, outtype_t *reducer)
-{
-    *reducer = in | *reducer;
-}
-
-outtype_t pack_32_bytes_in_64_bits(chartype_t in[SIZE_CHARS])
-{
-    outtype_t out[SIZE_OUT];
-    memset(out, 0, SIZE_OUT * sizeof(chartype_t));
-
-    encode_gatacca(in, out);
-
-    return out[0] | out[1] | out[2] | out[3];
-}
-
-/* seq must be null-terminated */
-out_s pack_seq_into_64bit_integers(chartype_t *seq, size_t len_str)
-{
-    size_t size_padded = len_str < 32 ? 32 : next_round_bits32(len_str);
-    size_t size_out = (size_padded / SIZE_CHARS) * sizeof(uint64_t);
-
-    char seq_padded[size_padded];
-    memset(seq_padded, 'A', size_padded);
-    for (size_t i = 0; i < len_str; ++i)
-        seq_padded[i] = seq[i];
-
-    seq_t out = malloc(size_out);
-    memset(out, 0, size_out);
-
-    size_t j = 0;
-    chartype_t in[SIZE_CHARS];
-    for (size_t i = 0; i < size_padded; i += SIZE_CHARS)
-    {
-        memset(in, 0, SIZE_CHARS * sizeof(chartype_t));
-        memcpy(in, &seq_padded[i], SIZE_CHARS * sizeof(chartype_t));
-
-        out[j++] = pack_32_bytes_in_64_bits(in);
-    }
-
-    return (out_s){.out = out, .out_len = j};
 }
 
 /* seq must be null-terminated */
 void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k)
 {
-    size_t len_str = strlen(seq);
-    out_s packed_out = pack_seq_into_64bit_integers(seq, len_str);
-    uint64_t key = get_kmer_key(seq, len_str, k);
-
-    insert_into_hashmap(self, key, packed_out.out, len_str, packed_out.out_len, index_in_array);
+    size_t len_seq = strlen(seq);
+    int size_out = (len_seq / k);
+    chartype_t out[size_out];
+    memset(out, 0, size_out);
+    get_kmers(seq, out, len_seq, k);
+    uint64_t key = get_kmer_key(out, size_out, k);
+    insert_into_hashmap(self, key, out, len_seq, size_out, index_in_array);
 }
 
 hm_s *cluster_seqs(chartype_t **seqs_in, size_t num_seqs, int k)
@@ -266,12 +197,13 @@ int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM])
     for (size_t i = 0; i < 32; i++)
     {
         c = v[i];
-        diff += lookup_num_diffs[c];
+        diff += lookup_num_diffs[(int)c];
+       // printf("%d = %d, ", (int) c, diff);
 
         if (diff >= 2)
             break;
     }
-
+    //printf("\n");
     return diff;
 }
 
@@ -281,8 +213,9 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
 
     hamtype_t a_buffer[SIZE_HAM];
     hamtype_t b_buffer[SIZE_HAM];
-
-    size_t num_bytes = SIZE_HAM * sizeof(hamtype_t);
+    size_t num_bytes = SIZE_HAM * sizeof(hamtype_t);    
+    memset(a_buffer, 0, num_bytes);
+    memset(b_buffer, 0, num_bytes);
 
     for (size_t i = 0; i < a.out_len; i += SIZE_HAM)
     {
@@ -301,6 +234,11 @@ void *hamming_cluster_single(void *cluster_ptr)
 
     clusterseqarr_t cluster_seqs = cluster->arr;
     hmsize_t cluster_size = cluster->n;
+
+    clusterseq_s arr[cluster_size];
+    for (int i = 0; i < cluster_size; i++) arr[i] = cluster_seqs[i];
+
+
     int diff = 0;
 
     clusterseq_s *lead;
@@ -316,6 +254,7 @@ void *hamming_cluster_single(void *cluster_ptr)
         for (size_t j = i + 1; j < cluster_size; ++j)
         {
             candidate = &cluster_seqs[j];
+
             if (candidate->is_dup)
                 continue;
 
@@ -327,6 +266,7 @@ void *hamming_cluster_single(void *cluster_ptr)
                 goto set_diff;
             }
         }
+
     }
 }
 
@@ -337,7 +277,7 @@ void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
     memset(threads, 0, size * sizeof(pthread_t));
 
     hmsize_t max = size;
-
+  
     printf("Creating threads for each cluster...\n");
     for (hmsize_t i = 0; i < size; ++i)
     {
@@ -348,8 +288,6 @@ void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
         pthread_join(threads[i], NULL);
         printf("Thread: `%u` joined; ", i);
     }
-
-    printf("\n");
 }
 
 void iterate_and_mark_dups(clusterseq_s lead, int out[])
@@ -388,19 +326,25 @@ void mark_out(clusterarr_t clusters_arr, tuphash_t size, int out[])
 
 non_zero_clusters_s filter_out_zero_clusters(clusterarr_t clusters, tuphash_t size)
 {
-    clusterarr_t ret = calloc(1, 1);
+    cluster_s curr_cluster;
+    cluster_s *ret = calloc(1, 1);
     size_t non_zero = 0;
 
     for (tuphash_t i = 0; i < size; i++)
     {
-        if (clusters[i].n < 2)
+        curr_cluster = clusters[i];
+
+        if (curr_cluster.n < 2)
             continue;
+        
+        int s = curr_cluster.arr[0].out_len;
+        int ss = curr_cluster.arr[1].out_len;
 
         non_zero++;
         ret = realloc(ret, non_zero * sizeof(cluster_s));
-        ret[non_zero - 1] = clusters[i];
+        ret[non_zero - 1] = curr_cluster;
     }
-    printf("Got %lu non-zero threads\n", non_zero);
+    printf("Got %lu non-zero clusters\n", non_zero);
 
     return (non_zero_clusters_s){.clusters = ret, .size = non_zero};
 }
@@ -413,11 +357,10 @@ void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
     non_zero_clusters_s non_zeroes = filter_out_zero_clusters(clustered->vec_vec, clustered->n);
     printf("Doing hamming...\n");
     hamming_clusters_hm(non_zeroes.clusters, non_zeroes.size);
-    printf("Markint the results...\n");
+    printf("Marking the results...\n");
     mark_out(non_zeroes.clusters, non_zeroes.size, out);
 
     printf("Fully done!\n");
-    free_hashmap(clustered);
 }
 
 void insert_resize_dupe(clusterseq_s *self, clusterseq_s *dupe)
@@ -480,12 +423,11 @@ hm_s *new_hashmap()
 }
 void init_hmv(hm_s *self, tuphash_t index, hmsize_t len_seq)
 {
-    self->vec_vec[index] = (cluster_s){.arr = malloc(sizeof(clusterseq_s)), .len_seq = len_seq, .n = 0x00000000, .hash = index + 1};
+    self->vec_vec[index] = (cluster_s){.arr = (clusterseq_s*)calloc(1, sizeof(clusterseq_s)), .len_seq = len_seq, .n = 0x00000000, .hash = index + 1};
 }
-
 void resize_insert_hmn(clusterseqarr_t self, hmsize_t index, seq_t seq_packed, size_t out_len, size_t index_in_array)
-{
-    self[index - 1] = (clusterseq_s){.dupes = calloc(1, sizeof(clusterseq_s)), .seq_packed = seq_packed, .out_len = out_len, .size_dup = 0, .index_in_array = index_in_array, .is_dup = 0};
+{   
+    self[index - 1] = (clusterseq_s){.dupes = (struct HashMapNode**)malloc(sizeof(struct HashMapNode*)), .seq_packed = seq_packed, .out_len = out_len, .size_dup = 0, .index_in_array = index_in_array, .is_dup = 0};
 }
 
 void resize_insert_hmv(cluster_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array)
@@ -538,7 +480,6 @@ void free_hashmap(hm_s *self)
 void insert_into_hashmap(hm_s *self, uint64_t key, seq_t seq_packed, size_t len_seq, size_t out_len, size_t index_in_array)
 {
     tuphash_t vec_index = hash_tuple_to_index(key, len_seq);
-     
     if (self->n < vec_index)
     {
         self->n = vec_index;

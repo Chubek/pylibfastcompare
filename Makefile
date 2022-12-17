@@ -4,7 +4,7 @@ target_so := libfastcompare.so
 arch := -mavx2
 
 CC = $(COMP)
-CFLAGS = $(arch) -shared -o $(target_so) -fPIC
+CFLAGS = $(arch) $(DEBUG) -shared -o $(target_so) -fPIC
 
 
 ifeq ($(PREFIX),)
