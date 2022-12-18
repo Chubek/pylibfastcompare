@@ -159,8 +159,9 @@ void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k)
 {
     size_t len_seq = strlen(seq);
     int size_out = (len_seq / k);
-    chartype_t out[size_out];
-    memset(out, 0, size_out);
+    int size_padded = size_out + (size_out % 32);
+    seq_t out = (seq_t)calloc(size_padded, sizeof(chartype_t));
+
     get_kmers(seq, out, len_seq, k);
     uint64_t key = get_kmer_key(out, size_out, k);
     insert_into_hashmap(self, key, out, len_seq, size_out, index_in_array);
@@ -197,34 +198,40 @@ int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM])
     for (size_t i = 0; i < 32; i++)
     {
         c = v[i];
-        diff += lookup_num_diffs[(int)c];
-       // printf("%d = %d, ", (int) c, diff);
-
+        int dd = lookup_num_diffs[c];
+        diff += lookup_num_diffs[c];
         if (diff >= 2)
             break;
     }
-    //printf("\n");
     return diff;
 }
 
 int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
 {
     int diff = 0;
+    int new_diff = 0;
 
     hamtype_t a_buffer[SIZE_HAM];
     hamtype_t b_buffer[SIZE_HAM];
     size_t num_bytes = SIZE_HAM * sizeof(hamtype_t);    
-    memset(a_buffer, 0, num_bytes);
-    memset(b_buffer, 0, num_bytes);
 
-    for (size_t i = 0; i < a.out_len; i += SIZE_HAM)
+    seq_t a_seq = a.seq_packed;
+    seq_t b_seq = b.seq_packed;
+    int out_len = strlen(a_seq);
+
+    for (size_t i = 0; i < out_len; i += SIZE_HAM)
     {
-        memcpy(a_buffer, &a.seq_packed[i], num_bytes);
-        memcpy(b_buffer, &b.seq_packed[i], num_bytes);
 
-        diff += get_hamming_integers(a_buffer, b_buffer);
+        memset(a_buffer, 0, num_bytes);
+        memset(b_buffer, 0, num_bytes);        
+        
+        for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) a_buffer[i] = a_seq[i + j];
+        for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) b_buffer[i] = b_seq[i + j];
+
+        new_diff = get_hamming_integers(a_buffer, b_buffer);
+        diff += new_diff;
     }
-
+ 
     return diff;
 }
 
