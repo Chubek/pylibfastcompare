@@ -356,6 +356,7 @@ void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
     printf("Joining threads...\n");
     for (hmsize_t i = 0; i < size; i++) {
         pthread_join(threads[i], NULL);
+        printf("Thread %d joined\n", 0);
     }
 
     pthread_mutex_destroy(&global_lock);
