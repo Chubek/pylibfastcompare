@@ -24,6 +24,10 @@ const uint8_t lookup_num_diffs[257] = {
     2, 3, 3, 3, 3, 4, 4, 4, 3, 4, 4, 4,
     3, 4, 4, 4, 1};
 
+
+pthread_mutex_t global_lock;
+int *global_out;
+
 void swap(chartype_t *in, int i, int j)
 {
     chartype_t tmp = in[i];
@@ -129,6 +133,57 @@ void get_freq_value(chartype_t *in, int size_in, int uint8_freqs[256]) {
     }
 }
 
+
+uint64_t murmurhash(const uint64_t key, int non_zero, uint32_t seed) {
+    const uint64_t m = 0xc6a4a7935bd1e995;
+	const int r = 47;
+
+    uint64_t h = seed ^ (non_zero * m);
+    uint64_t hprime = 0;
+
+    const uint64_t *data = &key;
+    const uint64_t *end = data + (non_zero / 8);
+
+    while (data != end) {
+        uint64_t k = *data++;
+
+        k *= m;
+        k ^= k >> r;
+        k *= m;
+
+        h ^= k;
+        h *= m;
+    }
+
+    const unsigned char *data2 = (const unsigned char*)data;
+
+    switch (non_zero & 7) {
+        case 7: h ^= ((uint64_t)data2[6]) << 48;
+	    case 6: h ^= ((uint64_t)data2[5]) << 40;
+	    case 5: h ^= ((uint64_t)data2[4]) << 32;
+	    case 4: h ^= ((uint64_t)data2[3]) << 24;
+	    case 3: h ^= ((uint64_t)data2[2]) << 16;
+	    case 2: h ^= ((uint64_t)data2[1]) << 8;
+	    case 1: h ^= ((uint64_t)data2[0]);
+	        h *= m;
+    };
+
+    h ^= h >> r;
+    h *= m;
+    h ^= h >> r;
+
+    if (key % 2 != 0) {
+        hprime = h;
+        h >>= 18; h *= m;
+        h >>= 22; h += m;
+        h >>= 17; h *= m;
+        h ^= hprime; h >>= 2;
+    }
+
+
+    return h;
+}
+
 uint64_t merge_freqs(int freqs[256]) {
     uint64_t key = 0;
 
@@ -145,7 +200,7 @@ uint64_t merge_freqs(int freqs[256]) {
 
     key <<= 16;
 
-    return key;
+    return murmurhash(key, non_zero_num, (uint32_t)(key >> 32));
 }
 
 uint64_t get_kmer_key(seq_t out, int size_out, int k){
@@ -242,20 +297,17 @@ void *hamming_cluster_single(void *cluster_ptr)
     clusterseqarr_t cluster_seqs = cluster->arr;
     hmsize_t cluster_size = cluster->n;
 
-    clusterseq_s arr[cluster_size];
-    for (int i = 0; i < cluster_size; i++) arr[i] = cluster_seqs[i];
-
-
     int diff = 0;
 
     clusterseq_s *lead;
     clusterseq_s *candidate;
     for (size_t i = 0; i < cluster_size; ++i)
     {
-    set_diff:
         lead = &cluster_seqs[i];
         if (lead->is_dup)
             continue;
+        
+        set_diff:
         diff = 0;
 
         for (size_t j = i + 1; j < cluster_size; ++j)
@@ -269,7 +321,12 @@ void *hamming_cluster_single(void *cluster_ptr)
 
             if (diff < 2)
             {
-                insert_resize_dupe(lead, candidate);
+                pthread_mutex_lock(&global_lock);
+                global_out[candidate->index_in_array] = lead->index_in_array;
+                pthread_mutex_unlock(&global_lock);
+                candidate->is_dup = 1;
+
+
                 goto set_diff;
             }
         }
@@ -280,6 +337,11 @@ void *hamming_cluster_single(void *cluster_ptr)
 /* seq must be null-terminated */
 void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
 {
+    if (pthread_mutex_init(&global_lock, NULL) != 0) {
+        printf("Failed to initiailize global thread lock. Exiting...\n");
+        exit(1);
+    }
+
     pthread_t threads[size];
     memset(threads, 0, size * sizeof(pthread_t));
 
@@ -291,10 +353,12 @@ void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
         pthread_create(&threads[i], NULL, &hamming_cluster_single, &non_zero_clusters[i]);
     }
 
+    printf("Joining threads...\n");
     for (hmsize_t i = 0; i < size; i++) {
         pthread_join(threads[i], NULL);
-        printf("Thread: `%u` joined; ", i);
     }
+
+    pthread_mutex_destroy(&global_lock);
 }
 
 void iterate_and_mark_dups(clusterseq_s lead, int out[])
@@ -358,14 +422,15 @@ non_zero_clusters_s filter_out_zero_clusters(clusterarr_t clusters, tuphash_t si
 
 void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
 {
+    global_out = out;
     printf("Clustering...\n");
     hm_s *clustered = cluster_seqs(seqs, num_seqs, K);
     printf("Done, getting non-szero clusters...\n");
     non_zero_clusters_s non_zeroes = filter_out_zero_clusters(clustered->vec_vec, clustered->n);
     printf("Doing hamming...\n");
     hamming_clusters_hm(non_zeroes.clusters, non_zeroes.size);
-    printf("Marking the results...\n");
-    mark_out(non_zeroes.clusters, non_zeroes.size, out);
+   // printf("Marking the results...\n");
+   // mark_out(non_zeroes.clusters, non_zeroes.size, out);
 
     printf("Fully done!\n");
 }
@@ -407,7 +472,6 @@ tuphash_t next_round_bits16(tuphash_t n)
 tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len)
 {
     hmsize_t hash_x = hash_bits(x);
-
     hmsize_t hashed = (tuphash_t)((((hash_x ^ PYHASH_X) % PYHASH_REM1) ^ (PYHASH_X ^ (len >> 2))) % (PYHASH_REM2));
     return (hashed % HASH_MAX) + 1;
 }
