@@ -141,9 +141,24 @@ uint64_t merge_freqs(int freqs[256]) {
         non_zero_num += 1;
     }
 
-    key = sum / non_zero_num;
+    int first_non_zero = 0;
+    for (int i = 0; i < 128; i++) {
+        if (freqs[i] != 0) {
+            first_non_zero = freqs[i];
+            break;
+        }
+    }
 
-    key <<= 16;
+    int second_non_zero = 0;
+    for (int i = 128; i < 256; i++) {
+        if (freqs[i] != 0) {
+            second_non_zero = freqs[i];
+            break;
+        }
+    }
+
+    key = (sum / non_zero_num) % ((first_non_zero * second_non_zero) + 1);
+    key <<= second_non_zero;
 
     return key;
 }
@@ -198,7 +213,6 @@ int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM])
     for (size_t i = 0; i < 32; i++)
     {
         c = v[i];
-        int dd = lookup_num_diffs[c];
         diff += lookup_num_diffs[c];
         if (diff >= 2)
             break;
@@ -217,7 +231,7 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
 
     seq_t a_seq = a.seq_packed;
     seq_t b_seq = b.seq_packed;
-    int out_len = strlen(a_seq);
+    int out_len = a.out_len;
 
     for (size_t i = 0; i < out_len; i += SIZE_HAM)
     {
@@ -228,8 +242,7 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
         for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) a_buffer[i] = a_seq[i + j];
         for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) b_buffer[i] = b_seq[i + j];
 
-        new_diff = get_hamming_integers(a_buffer, b_buffer);
-        diff += new_diff;
+        diff += get_hamming_integers(a_buffer, b_buffer);
     }
  
     return diff;
@@ -240,11 +253,7 @@ void *hamming_cluster_single(void *cluster_ptr)
     cluster_s *cluster = (cluster_s *)cluster_ptr;
 
     clusterseqarr_t cluster_seqs = cluster->arr;
-    hmsize_t cluster_size = cluster->n;
-
-    clusterseq_s arr[cluster_size];
-    for (int i = 0; i < cluster_size; i++) arr[i] = cluster_seqs[i];
-
+    hmsize_t cluster_size = cluster->n; 
 
     int diff = 0;
 
