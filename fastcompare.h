@@ -4,7 +4,6 @@
 #include <string.h>
 #include <immintrin.h>
 #include <pthread.h>
-#include <unistd.h>
 
 #define K 4
 
