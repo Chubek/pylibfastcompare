@@ -221,6 +221,16 @@ uint64_t get_kmer_key(seq_t out, int size_out, int k){
     return merge_freqs(freqs);
 }
 
+uint64_t djb2(seq_t seq, int size) {
+    uint64_t hash = 5381UL;
+
+    for (int i = size / 2; i < 3 * (size / 4); i++) {
+        hash = ((hash << 5) + hash) + seq[i];
+    }
+
+    return hash;
+}
+
 /* seq must be null-terminated */
 void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k)
 {
@@ -231,6 +241,10 @@ void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k)
 
     get_kmers(seq, out, len_seq, k);
     uint64_t key = get_kmer_key(out, size_out, k);
+    uint64_t djb = djb2(seq, len_seq);
+
+    key ^= djb >> 48;
+
     insert_into_hashmap(self, key, out, len_seq, size_out, index_in_array);
 }
 
@@ -311,6 +325,7 @@ void *parallel_pairwise_comparator(void *num) {
 
     do {
         if (q->has_member) {
+            sleepms(1L);
             curr_pair = pop_fifo(q);
 
             if (!curr_pair.candidate) continue;
@@ -372,8 +387,9 @@ void *hamming_cluster_single(void *cluster_ptr)
             unlock_fifo(&queues[k]);
 
             k++;
-        } while (j++ < cluster_size);
 
+            sleepms(1L);
+        } while (j++ < cluster_size);
     } while (i++ < cluster_size);
 }
 
@@ -632,15 +648,22 @@ void init_fifo(fifo_s *self) {
 }
 
 void put_fifo(fifo_s *self, pairwise_s item) {
-    self->arr[self->curr_index++] = item;
+    self->arr[self->curr_index] = item;
+
+    if (self->curr_index++ > QBUFF - 1) {
+        self->curr_index = QBUFF - 1;
+    }
+
     self->has_member = 1;
 }
 
 pairwise_s pop_fifo(fifo_s *self) {
-    pairwise_s ret_pair = self->arr[--self->curr_index];    
-    if (self->curr_index == 0) {
-        self->has_member = 0;
+    if (--self->curr_index < 0) {
+        self->curr_index = 0;
+        self->has_member = 0;;
     }
+
+    pairwise_s ret_pair = self->arr[self->curr_index];   
     return ret_pair;
 }
 

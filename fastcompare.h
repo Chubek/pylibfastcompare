@@ -10,6 +10,7 @@
 
 #define K 4
 #define NUM_PARA 48
+#define QBUFF   2048
 
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c\n"
 #define BYTE_TO_BINARY(byte)  \
@@ -101,8 +102,8 @@ typedef struct PairWiseSeq {
 
 
 typedef struct FifOQueue {
-    pairwise_s arr[1024];
-    uint32_t curr_index;
+    pairwise_s arr[QBUFF];
+    int curr_index;
     int has_member;
     int join;
     pthread_mutex_t lock;
