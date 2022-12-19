@@ -9,7 +9,7 @@
 #include <errno.h>
 
 #define K 4
-#define NUM_PARA 1
+#define NUM_PARA 48
 
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c\n"
 #define BYTE_TO_BINARY(byte)  \
@@ -101,8 +101,8 @@ typedef struct PairWiseSeq {
 
 
 typedef struct FifOQueue {
-    pairwise_s arr[UINT8_MAX];
-    uint8_t curr_index;
+    pairwise_s arr[1024];
+    uint32_t curr_index;
     int has_member;
     int join;
     pthread_mutex_t lock;
@@ -110,7 +110,7 @@ typedef struct FifOQueue {
 
 void init_fifo(fifo_s *self);
 void put_fifo(fifo_s *self, pairwise_s item);
-pairwise_s *pop_fifo(fifo_s *self);
+pairwise_s pop_fifo(fifo_s *self);
 void lock_fifo(fifo_s *self);
 void unlock_fifo(fifo_s *self);
 void join_fifo(fifo_s *self);

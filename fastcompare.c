@@ -29,6 +29,17 @@ fifo_s queues[NUM_PARA];
 
 pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
 
+int sleepms(long miliseconds)
+{
+   struct timespec rem;
+   struct timespec req= {
+       (int)(miliseconds / 1000),     /* secs (Must be Non-Negative) */ 
+       (miliseconds % 1000) * 1000000 /* nano (Must be in range of 0 to 999999999) */ 
+   };
+
+   return nanosleep(&req , &rem);
+}
+
 void swap(chartype_t *in, int i, int j)
 {
     chartype_t tmp = in[i];
@@ -295,25 +306,26 @@ void *parallel_pairwise_comparator(void *num) {
     int *np = (int*)num;
     int n = *np;
     int diff;
-    pairwise_s *curr_pair;  
+    pairwise_s curr_pair;  
     fifo_s *q = &queues[n];
 
     do {
         if (q->has_member) {
             curr_pair = pop_fifo(q);
 
-            if (!curr_pair) continue;
-            if (!curr_pair->candidate) continue;
-            if (!curr_pair->lead) continue;
-            if (curr_pair->candidate->is_dup) continue;
+            if (!curr_pair.candidate) continue;
+            if (!curr_pair.lead) continue;
+            if (curr_pair.candidate->is_dup) continue;
 
-            int diff = hamming_hseq_pair(*curr_pair->lead, *curr_pair->candidate);
+            int diff = hamming_hseq_pair(*curr_pair.lead, *curr_pair.candidate);
             if (diff < 2) {
                 pthread_mutex_lock(&global_lock);
-                global_out[curr_pair->candidate->index_in_array] = curr_pair->lead->index_in_array;
+                global_out[curr_pair.candidate->index_in_array] = curr_pair.lead->index_in_array;
                 pthread_mutex_unlock(&global_lock);
-                curr_pair->candidate->is_dup = 1;
-                *curr_pair->skip_rest = 1;
+                curr_pair.candidate->is_dup = 1;
+                *curr_pair.skip_rest = 1;
+
+                sleepms(1L);
             }
 
         }
@@ -333,35 +345,36 @@ void *hamming_cluster_single(void *cluster_ptr)
 
     clusterseq_s *lead;
     clusterseq_s *candidate;
-    pairwise_s pair;
+    int i = 0;
 
-    for (size_t i = 0; i < cluster_size; ++i)
+    do
     {
         lead = &cluster_seqs[i];
         if (lead->is_dup)
-            continue;
-        
-        anew:
-        int size_candidates = cluster_size - i >= NUM_PARA ? cluster_size - 1 : NUM_PARA;
-        for (int j = 0; j < size_candidates; j += NUM_PARA) {
-            int skip_rest = 0;
-            for (int k = 0; k < NUM_PARA; k++) {
-                if (skip_rest) goto anew;       
-                if (k >= cluster_size) return  NULL;
+            continue;     
 
-                candidate = &cluster_seqs[j + k];
-                
-                
-                pair = (pairwise_s){.lead=lead, .candidate=candidate, .skip_rest=&skip_rest};
-                
-                lock_fifo(&queues[k]);
-                put_fifo(&queues[k], pair);
-                unlock_fifo(&queues[k]);
-            }
-        }
-        
+        anew:   
+        int k = 0;
+        int skip_rest = 0;
+        int j = i + 1;
 
-    }
+        do 
+        {
+            if (k > NUM_PARA - 1) k = 0;
+            if (skip_rest) {
+                printf("Sequence #%d from cluster with size %d deduped\n", i, cluster->n);
+                goto anew;
+            };       
+            candidate = &cluster_seqs[j];            
+            
+            lock_fifo(&queues[k]);
+            put_fifo(&queues[k], (pairwise_s){.lead=lead, .candidate=candidate, .skip_rest=&skip_rest});
+            unlock_fifo(&queues[k]);
+
+            k++;
+        } while (j++ < cluster_size);
+
+    } while (i++ < cluster_size);
 }
 
 /* seq must be null-terminated */
@@ -394,7 +407,7 @@ void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
     printf("Joining threads...\n");
     for (hmsize_t i = 0; i < size; i++) {
         pthread_join(threads[i], NULL);
-        printf("Thread %d joined\n", 0);
+        printf("Thread %d with size %d joined\n", i, non_zero_clusters[i].n);
     }
 
     pthread_mutex_destroy(&global_lock);
@@ -614,22 +627,20 @@ cluster_s get_hashmap_value(hm_s *self, uint64_t key, hmsize_t len_seq)
 }
 
 void init_fifo(fifo_s *self) {
-    self->curr_index = self->has_member = self->join = 0;
+    self->curr_index = self->has_member = self->join = 0;   
     pthread_mutex_init(&self->lock, NULL);
 }
 
 void put_fifo(fifo_s *self, pairwise_s item) {
     self->arr[self->curr_index++] = item;
-    self->has_member = 1; 
+    self->has_member = 1;
 }
 
-pairwise_s *pop_fifo(fifo_s *self) {
-    if (!self->has_member) return NULL;
-    pairwise_s *ret_pair = &self->arr[--self->curr_index];
+pairwise_s pop_fifo(fifo_s *self) {
+    pairwise_s ret_pair = self->arr[--self->curr_index];    
     if (self->curr_index == 0) {
         self->has_member = 0;
     }
-
     return ret_pair;
 }
 
@@ -651,3 +662,4 @@ void join_fifo(fifo_s *self) {
         }
     }
 }
+

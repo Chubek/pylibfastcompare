@@ -50,7 +50,7 @@ def run_libfastcompare(path: str, thread_div: int):
     print("Getting hamming with FFI...")
     lib.cluster_ham_and_mark(list(map(lambda x: x[-1], bytes_)), size, 4, out)
     out = [i for i in out]
-
+    print(out)
     print(f"Done deduping. Took {time() - t} seconds. Exporting results...")
     print(f"Found {len([i for i in out if i != -1])} dups")
     
