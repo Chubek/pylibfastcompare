@@ -27,6 +27,29 @@ const uint8_t lookup_num_diffs[257] = {
 
 pthread_mutex_t global_lock;
 int *global_out;
+pthread_cond_t event_emitters[48] = {
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+    (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, (pthread_cond_t)PTHREAD_COND_INITIALIZER, 
+
+};
+
+fifo_s queues[48];
+pthread_mutex_t parallel_locks[48];
+
 
 void swap(chartype_t *in, int i, int j)
 {
@@ -290,6 +313,57 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
     return diff;
 }
 
+void *parallel_pairwise_comparator(void *num) {
+    int *np = (int*)num;
+    int n = *np;
+    int rc = pthread_mutex_lock(&parallel_locks[n]);
+    struct timeval now;
+    struct timespec timeout;
+    int done = 0;
+    pairwise_s *curr_pair;
+
+
+    gettimeofday(&now, &timeout);
+    timeout.tv_sec = now.tv_sec + 5;
+    timeout.tv_nsec = now.tv_usec + 2000;
+  
+    do {
+        rc = pthread_cond_timedwait(&event_emitters[n], &parallel_locks[n], &timeout);
+        
+        switch (rc) {
+            case 0:
+                curr_pair = pop_fifo(&queues[n]);
+
+                if (!curr_pair) continue;
+                if (*curr_pair->skip_rest || curr_pair->candidate->is_dup)
+                    continue;
+
+                int diff = hamming_hseq_pair(*curr_pair->lead, *curr_pair->candidate);
+
+                if (diff < 2) {
+
+                    pthread_mutex_lock(&global_lock);
+                    global_out[curr_pair->candidate->index_in_array] = curr_pair->lead->index_in_array;
+                    pthread_mutex_unlock(&global_lock);
+                    curr_pair->candidate->is_dup = 1;
+                    *curr_pair->skip_rest = 1;
+                }
+
+            case ETIMEDOUT:
+                done = 1;
+                break;
+            default:
+                break;
+        }
+        
+        
+    } while (!done);
+
+    pthread_mutex_unlock(&parallel_locks[n]);
+
+}
+
+
 void *hamming_cluster_single(void *cluster_ptr)
 {
     cluster_s *cluster = (cluster_s *)cluster_ptr;
@@ -301,35 +375,29 @@ void *hamming_cluster_single(void *cluster_ptr)
 
     clusterseq_s *lead;
     clusterseq_s *candidate;
+    pairwise_s pair;
+
     for (size_t i = 0; i < cluster_size; ++i)
     {
         lead = &cluster_seqs[i];
         if (lead->is_dup)
             continue;
         
-        set_diff:
-        diff = 0;
+        anew:
+        int size_candidates = cluster_size - i >= 48 ? cluster_size - 1 : 48;
+        for (int j = 0; j < size_candidates; j += 48) {
+            int skip_rest = 0;
+            for (int k = 0; k < 48; k++) {
+                if (skip_rest) goto anew;       
+                if (k >= cluster_size) return  NULL;
 
-        for (size_t j = i + 1; j < cluster_size; ++j)
-        {
-            candidate = &cluster_seqs[j];
-
-            if (candidate->is_dup)
-                continue;
-
-            diff = hamming_hseq_pair(*lead, *candidate);
-
-            if (diff < 2)
-            {
-                pthread_mutex_lock(&global_lock);
-                global_out[candidate->index_in_array] = lead->index_in_array;
-                pthread_mutex_unlock(&global_lock);
-                candidate->is_dup = 1;
-
-
-                goto set_diff;
+                candidate = &cluster_seqs[j + k];
+                pair = (pairwise_s){.lead=lead, .candidate=candidate, .skip_rest=&skip_rest};
+                put_fifo(&queues[k], &pair);
+                pthread_cond_signal(&event_emitters[k]);
             }
         }
+        
 
     }
 }
@@ -340,6 +408,19 @@ void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
     if (pthread_mutex_init(&global_lock, NULL) != 0) {
         printf("Failed to initiailize global thread lock. Exiting...\n");
         exit(1);
+    }
+
+    pthread_t workers[48];
+    int nums[48];
+    for (int i =  0; i < 48; i++) nums[i] = i;
+
+    for (int i = 0; i < 48; i++) {
+        if (pthread_mutex_init(&parallel_locks[i], NULL) != 0) {
+            printf("Failed to initiailize forth parallel lock #%d. Exiting...\n", i);
+            exit(1);
+        }       
+        init_fifo(&queues[i]);
+        pthread_create(&workers[i], NULL, &parallel_pairwise_comparator, &nums[i]);
     }
 
     pthread_t threads[size];
@@ -360,6 +441,12 @@ void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
     }
 
     pthread_mutex_destroy(&global_lock);
+    for (int i = 0; i < 48; i++) {
+        pthread_join(workers[i], NULL);
+        pthread_mutex_destroy(&parallel_locks[i]);
+        pthread_cond_destroy(&event_emitters[i]);
+        printf("Worker thread %d joined, lock & cond destoryed\n", i);
+    }
 }
 
 void iterate_and_mark_dups(clusterseq_s lead, int out[])
@@ -568,4 +655,15 @@ cluster_s get_hashmap_value(hm_s *self, uint64_t key, hmsize_t len_seq)
     size_t vec_index = hash_tuple_to_index(key, len_seq);
 
     return self->vec_vec[vec_index - 1];
+}
+
+void init_fifo(fifo_s *self) {
+    self->curr_index = self->is_empty = 0;
+
+}
+void put_fifo(fifo_s *self, pairwise_s *item) {
+    self->arr[self->curr_index++] = item;
+}
+pairwise_s *pop_fifo(fifo_s *self) {
+    return self->arr[--self->curr_index];
 }

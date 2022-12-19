@@ -4,6 +4,9 @@
 #include <string.h>
 #include <immintrin.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <errno.h>
 
 #define K 4
 
@@ -89,6 +92,22 @@ typedef struct NonZeroClusters {
 } non_zero_clusters_s;
 
 
+typedef struct PairWiseSeq {
+    clusterseq_s *lead;
+    clusterseq_s *candidate;
+    int *skip_rest;
+} pairwise_s;
+
+
+typedef struct FifOQueue {
+    pairwise_s *arr[UINT8_MAX];
+    uint8_t curr_index;
+    int is_empty;
+} fifo_s;
+
+void init_fifo(fifo_s *self);
+void put_fifo(fifo_s *self, pairwise_s *item);
+pairwise_s *pop_fifo(fifo_s *self);
 int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM]);
 void *hamming_cluster_single(void *cluster_ptr);
 void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size);
