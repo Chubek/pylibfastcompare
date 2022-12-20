@@ -6,25 +6,32 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
     hmsize_t next_round = 8;
     hmsize_t size = 0;
     cluster_s *nz_clusters= calloc(next_round, sizeof(cluster_s*));
-   
-    for (int i = 0; i < hm->n; i++) {
-        for (int j = 0; j < hm->bucket_arr[i].n; j++) {
-            if (hm->bucket_arr[i].cluster_arr[j].n > 1) {
-                nz_clusters[size] = hm->bucket_arr[i].cluster_arr[j];
+    
+    bucket_s curr_bucket;
+    cluster_s curr_cluster;
 
-                size++;
+    for (int i = 0; i < hm->next_round; i++) {
+        curr_bucket = hm->bucket_arr[i];
+        if (curr_bucket.n == 0) continue;
 
-                if (size > next_round) {
-                    next_round += 8;
-                    cluster_s *nptr = (cluster_s *)realloc(nz_clusters, next_round * sizeof(cluster_s));
+        for (int j = 0; j < curr_bucket.next_round; j++) {
+            curr_cluster = curr_bucket.cluster_arr[j];
+            if (curr_cluster.n < 2) continue;
 
-                    if (!nptr) {
-                        printf("Error reallocating non-zero clusters array.\n");
-                        exit(ENOMEM);
-                    }
+            nz_clusters[size] = curr_cluster;
 
-                    nz_clusters = nptr;
+            size++;
+
+            if (size > next_round) {
+                next_round += 8;
+                cluster_s *nptr = (cluster_s *)realloc(nz_clusters, next_round * sizeof(cluster_s));
+
+                if (!nptr) {
+                    printf("Error reallocating non-zero clusters array.\n");
+                    exit(ENOMEM);
                 }
+
+                nz_clusters = nptr;
             }
         }
     }

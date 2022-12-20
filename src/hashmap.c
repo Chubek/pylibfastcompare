@@ -14,7 +14,11 @@ hmsize_t next_round_bits32(hmsize_t n)
 
 tuphash_t next_round_bits16(tuphash_t n)
 {
-    return ROUNDUP_16(n);
+    int rounded_up = ROUNDUP_16(n);
+    
+    if (rounded_up == 0) rounded_up = UINT16_MAX;
+
+    return rounded_up;
 }
 
 tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len)
@@ -49,7 +53,7 @@ clusterseq_s new_clusterseq(seq_t seq_packed, size_t out_len, size_t index_in_ar
 
 
 void resize_insert_bucket(hm_s *self, tuphash_t hash) {
-    tuphash_t next_round = next_round_bits16(self->n);
+    tuphash_t next_round = next_round_bits16(hash);
 
     if (next_round > self->next_round) {
         bucket_s *nptr = (bucket_s *)realloc(self->bucket_arr, next_round * sizeof(bucket_s));
@@ -63,12 +67,12 @@ void resize_insert_bucket(hm_s *self, tuphash_t hash) {
         self->next_round = next_round;
     }
 
-    self->bucket_arr[self->n] = new_bucket(hash);
+    self->bucket_arr[hash - 1] = new_bucket(hash);
     self->n++;
 }
 
 void resize_insert_cluster(bucket_s *self, tuphash_t hash, hmsize_t len) {
-    tuphash_t next_round = next_round_bits16(self->n);
+    tuphash_t next_round = next_round_bits16(hash);
 
     if (next_round > self->next_round) {
         cluster_s  *nptr = (cluster_s *)realloc(self->cluster_arr, next_round * sizeof(bucket_s));
@@ -82,7 +86,7 @@ void resize_insert_cluster(bucket_s *self, tuphash_t hash, hmsize_t len) {
         self->next_round = next_round;
     }
 
-    self->cluster_arr[self->n] = new_cluster(hash, len);
+    self->cluster_arr[hash - 1] = new_cluster(hash, len);
     self->n++;
 }
 
@@ -109,17 +113,17 @@ void insert_seq_into_hashmap(hm_s *self, uint64_t key, seq_t seq, hmsize_t len_s
     tuphash_t hash_bucket = hash_tuple_to_index(key, len_seq);
     tuphash_t hash_cluster = hash_tuple_to_index(key, out_len);
 
-    if (hash_bucket > self->n) {
+    if (hash_bucket > self->next_round) {
         resize_insert_bucket(self, hash_bucket);
     }
 
-    bucket_s bucket = self->bucket_arr[hash_bucket];
+    bucket_s *bucket = &self->bucket_arr[hash_bucket - 1];
 
-    if (hash_cluster > bucket.n) {
-        resize_insert_cluster(&bucket, hash_cluster, len_seq);
+    if (hash_cluster > bucket->next_round) {
+        resize_insert_cluster(bucket, hash_cluster, len_seq);
     }
 
-    cluster_s cluster = bucket.cluster_arr[hash_cluster];
+    cluster_s *cluster = &bucket->cluster_arr[hash_cluster - 1];
 
-    resize_insert_clusterseq(&cluster, seq, out_len, index_in_array);
+    resize_insert_clusterseq(cluster, seq, out_len, index_in_array);
 }
