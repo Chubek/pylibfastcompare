@@ -245,16 +245,16 @@ void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k)
 
     key ^= djb >> 48;
 
-    insert_into_hashmap(self, key, out, len_seq, size_out, index_in_array);
+    insert_seq_into_hashmap(self, key, seq, len_seq, size_out, index_in_array);
 }
 
-hm_s *cluster_seqs(chartype_t **seqs_in, size_t num_seqs, int k)
+hm_s cluster_seqs(chartype_t **seqs_in, size_t num_seqs, int k)
 {
-    hm_s *hm = new_hashmap();
+    hm_s hm = new_hashmap();
 
     for (int i = 0; i < num_seqs; i++)
     {
-        insert_seq_in_hm(hm, seqs_in[i], i, k);
+        insert_seq_in_hm(&hm, seqs_in[i], i, k);
     }
 
     return hm;
@@ -318,88 +318,14 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
     return diff;
 }
 
-void *parallel_pairwise_comparator(void *num) {
-    int *np = (int*)num;
-    int n = *np;
-    int diff;
-    pairwise_s curr_pair;  
-    fifo_s *q = &queues[n];
-
-    do {
-        if (q->has_member) {
-            sleepms(1L);
-            curr_pair = pop_fifo(q);
-
-            if (!curr_pair.candidate) continue;
-            if (!curr_pair.lead) continue;
-            if (curr_pair.candidate->is_dup) continue;
-
-            int diff = hamming_hseq_pair(*curr_pair.lead, *curr_pair.candidate);
-            if (diff < 2) {
-                pthread_mutex_lock(&global_lock);
-                global_out[curr_pair.candidate->index_in_array] = curr_pair.lead->index_in_array;
-                pthread_mutex_unlock(&global_lock);
-                curr_pair.candidate->is_dup = 1;
-                *curr_pair.skip_rest = 1;
-
-                sleepms(1L);
-            }
-
-        }
-    } while(!q->join);
-
-}
 
 
-void *_hamming_cluster_single(void *cluster_ptr)
-{
-    cluster_s *cluster = (cluster_s *)cluster_ptr;
-
-    clusterseqarr_t cluster_seqs = cluster->arr;
-    hmsize_t cluster_size = cluster->n;
-
-    int diff = 0;
-
-    clusterseq_s *lead;
-    clusterseq_s *candidate;
-    int i = 0;
-
-    do
-    {
-        lead = &cluster_seqs[i];
-        if (lead->is_dup)
-            continue;     
-
-        anew:   
-        int k = 0;
-        int skip_rest = 0;
-        int j = i + 1;
-
-        do 
-        {
-            if (k > NUM_PARA - 1) k = 0;
-            if (skip_rest) {
-                printf("Sequence #%d from cluster with size %d deduped\n", i, cluster->n);
-                goto anew;
-            };       
-            candidate = &cluster_seqs[j];            
-            
-            lock_fifo(&queues[k]);
-            put_fifo(&queues[k], (pairwise_s){.lead=lead, .candidate=candidate, .skip_rest=&skip_rest});
-            unlock_fifo(&queues[k]);
-
-            k++;
-
-            sleepms(1L);
-        } while (j++ < cluster_size);
-    } while (i++ < cluster_size);
-}
 
 void *hamming_cluster_single(void *cluster_ptr)
 {
     cluster_s *cluster = (cluster_s *)cluster_ptr;
 
-    clusterseqarr_t cluster_seqs = cluster->arr;
+    clusterseqarr_t cluster_seqs = cluster->clusterseq_arr;
     hmsize_t cluster_size = cluster->n;
 
     int diff = 0;
@@ -441,46 +367,7 @@ void *hamming_cluster_single(void *cluster_ptr)
     } while (i++ < cluster_size);
 }
 
-/* seq must be null-terminated */
-void _hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
-{
-    if (pthread_mutex_init(&global_lock, NULL) != 0) {
-        printf("Failed to initiailize global thread lock. Exiting...\n");
-        exit(1);
-    }
 
-    pthread_t workers[NUM_PARA];
-    int nums[NUM_PARA];
-    for (int i =  0; i < NUM_PARA; i++) nums[i] = i;
-    for (int i = 0; i < NUM_PARA; i++) {
-        init_fifo(&queues[i]);
-        pthread_create(&workers[i], NULL, &parallel_pairwise_comparator, &nums[i]);
-    }
-
-    pthread_t threads[size];
-    memset(threads, 0, size * sizeof(pthread_t));
-
-    hmsize_t max = size;
-  
-    printf("Creating threads for each cluster...\n");
-    for (hmsize_t i = 0; i < size; ++i)
-    {
-        pthread_create(&threads[i], NULL, &hamming_cluster_single, &non_zero_clusters[i]);
-    }
-
-    printf("Joining threads...\n");
-    for (hmsize_t i = 0; i < size; i++) {
-        pthread_join(threads[i], NULL);
-        printf("Thread %d with size %d joined\n", i, non_zero_clusters[i].n);
-    }
-
-    pthread_mutex_destroy(&global_lock);
-    for (int i = 0; i < NUM_PARA; i++) {
-        join_fifo(&queues[i]);
-        pthread_join(workers[i], NULL);
-        printf("Worker thread %d joined, lock & cond destoryed\n", i);
-    }
-}
 
 void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
 {
@@ -508,96 +395,57 @@ void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
     }
 }
 
-void iterate_and_mark_dups(clusterseq_s lead, int out[])
-{
-    if (lead.is_dup)
-        return;
 
-    size_t lead_index = lead.index_in_array;
-    clusterseq_s *curr_dup;
+non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
+{   
+    hmsize_t next_round = 8;
+    hmsize_t size = 0;
+    cluster_s *nz_clusters= calloc(next_round, sizeof(cluster_s*));
+   
+    for (int i = 0; i < hm->n; i++) {
+        for (int j = 0; j < hm->bucket_arr[i].n; j++) {
+            if (hm->bucket_arr[i].cluster_arr[j].n > 1) {
+                nz_clusters[size] = hm->bucket_arr[i].cluster_arr[j];
 
-    for (int i = 0; i < lead.size_dup; ++i)
-    {
-        curr_dup = lead.dupes[i];
-        out[curr_dup->index_in_array] = lead_index;
-    }
-}
+                size++;
 
-void mark_out(clusterarr_t clusters_arr, tuphash_t size, int out[])
-{
-    clusterseqarr_t curr_cluster_arr;
-    clusterseq_s curr_seq;
+                if (size > next_round) {
+                    next_round += 8;
+                    cluster_s *nptr = (cluster_s *)realloc(nz_clusters, next_round * sizeof(cluster_s));
 
-    for (hmsize_t i = 0; i < size; ++i)
-    {
-        if (clusters_arr[i].n < 2)
-            continue;
-        curr_cluster_arr = clusters_arr[i].arr;
+                    if (!nptr) {
+                        printf("Error reallocating non-zero clusters array.\n");
+                        exit(ENOMEM);
+                    }
 
-        for (hmsize_t j = 0; j < clusters_arr[i].n; ++j)
-        {
-            curr_seq = curr_cluster_arr[j];
-            iterate_and_mark_dups(curr_seq, out);
+                    nz_clusters = nptr;
+                }
+            }
         }
     }
-}
 
-non_zero_clusters_s filter_out_zero_clusters(clusterarr_t clusters, tuphash_t size)
-{
-    cluster_s curr_cluster;
-    cluster_s *ret = calloc(1, 1);
-    size_t non_zero = 0;
 
-    for (tuphash_t i = 0; i < size; i++)
-    {
-        curr_cluster = clusters[i];
+    printf("Got %lu non-zero clusters\n", size);
 
-        if (curr_cluster.n < 2)
-            continue;
-        
-        int s = curr_cluster.arr[0].out_len;
-        int ss = curr_cluster.arr[1].out_len;
-
-        non_zero++;
-        ret = realloc(ret, non_zero * sizeof(cluster_s));
-        ret[non_zero - 1] = curr_cluster;
-    }
-    printf("Got %lu non-zero clusters\n", non_zero);
-
-    return (non_zero_clusters_s){.clusters = ret, .size = non_zero};
+    return (non_zero_clusters_s){.clusters=nz_clusters, .size=size};
 }
 
 void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
 {
     global_out = out;
-    printf("Clustering...\n");
-    hm_s *clustered = cluster_seqs(seqs, num_seqs, K);
-    printf("Done, getting non-szero clusters...\n");
-    non_zero_clusters_s non_zeroes = filter_out_zero_clusters(clustered->vec_vec, clustered->n);
+    printf("Clustering...\n");    
+    hm_s clustered = cluster_seqs(seqs, num_seqs, K);
+
+    printf("Done, getting non-szero and non-one clusters...\n");
+    non_zero_clusters_s non_zeroes = filter_out_zero_clusters(&clustered);
+    
     printf("Doing hamming...\n");
     hamming_clusters_hm(non_zeroes.clusters, non_zeroes.size);
-   // printf("Marking the results...\n");
-   // mark_out(non_zeroes.clusters, non_zeroes.size, out);
+   
 
     printf("Fully done!\n");
 }
 
-void insert_resize_dupe(clusterseq_s *self, clusterseq_s *dupe)
-{
-    self->size_dup++;
-
-    clusterseq_s **resized = realloc(self->dupes, sizeof(clusterseq_s) * self->size_dup);
-
-    if (!resized)
-    {
-        printf("Error reallocating dupe array\n");
-        exit(139);
-    }
-
-    self->dupes = resized;
-    self->dupes[self->size_dup - 1] = dupe;
-    dupe->is_dup = 1;
-}
 
 hmsize_t hash_bits(uint64_t x)
 {
@@ -620,100 +468,13 @@ tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len)
 {
     hmsize_t hash_x = hash_bits(x);
     hmsize_t hashed = (tuphash_t)((((hash_x ^ PYHASH_X) % PYHASH_REM1) ^ (PYHASH_X ^ (len >> 2))) % (PYHASH_REM2));
-    return (hashed % HASH_MAX) + 1;
-}
+    
+    hmsize_t hashed = ((hashed % HASH_MAX) + 1);
 
-hm_s *new_hashmap()
-{
-    hm_s *hm = malloc(sizeof(hm_s));
-
-    if (!hm)
-    {
-        printf("Error allocating hashmap on heap\n");
-        exit(139);
-    }
-
-    hm->vec_vec = (cluster_s *)calloc(1, sizeof(cluster_s));
-    hm->n = 0;
-    hm->next_round = 0;
-
-    return hm;
-}
-void init_hmv(hm_s *self, tuphash_t index, hmsize_t len_seq)
-{
-    self->vec_vec[index] = (cluster_s){.arr = (clusterseq_s*)calloc(1, sizeof(clusterseq_s)), .len_seq = len_seq, .n = 0x00000000, .hash = index + 1};
-}
-void resize_insert_hmn(clusterseqarr_t self, hmsize_t index, seq_t seq_packed, size_t out_len, size_t index_in_array)
-{   
-    self[index - 1] = (clusterseq_s){.dupes = (struct HashMapNode**)malloc(sizeof(struct HashMapNode*)), .seq_packed = seq_packed, .out_len = out_len, .size_dup = 0, .index_in_array = index_in_array, .is_dup = 0};
-}
-
-void resize_insert_hmv(cluster_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array)
-{
-    self->n++;
-    size_t new_len = sizeof(clusterseq_s) * self->n;
-    self->arr = (clusterseqarr_t)realloc(self->arr, new_len);
-    resize_insert_hmn(self->arr, self->n, seq_packed, out_len, index_in_array);
-}
-
-void resize_hashmap(hm_s *self)
-{
-    hmsize_t rounded_up = self->next_round = next_round_bits32(self->n);
-    if (rounded_up == 0)
-        rounded_up = self->next_round = UINT16_MAX;
-
-    if (rounded_up > self->n)
-    {
-        cluster_s *p_new = (cluster_s *)realloc(self->vec_vec, rounded_up * sizeof(cluster_s));
-        if (!p_new)
-        {
-            printf("Error reallocating hashmap value vector on heap to %hu\n", self->next_round);
-            exit(139);
-        }
-        self->vec_vec = p_new;
-    }
-}
-
-void free_hashmap_node(clusterseq_s node)
-{
-    free(node.seq_packed);
-}
-
-void free_hashmap_vec(cluster_s self)
-{
-    for (int i = 0; i < self.n; i++)
-    {
-        free_hashmap_node(self.arr[i]);
-    }
-}
-
-void free_hashmap(hm_s *self)
-{
-    for (hmsize_t i = 0; i < self->n; ++i)
-        free_hashmap_vec(self->vec_vec[i]);
-
-    free(self);
-}
-
-void insert_into_hashmap(hm_s *self, uint64_t key, seq_t seq_packed, size_t len_seq, size_t out_len, size_t index_in_array)
-{
-    tuphash_t vec_index = hash_tuple_to_index(key, len_seq);
-    if (self->n < vec_index)
-    {
-        self->n = vec_index;
-        resize_hashmap(self);
-
-        init_hmv(self, vec_index - 1, len_seq);
-    }
-
-    resize_insert_hmv(&self->vec_vec[vec_index - 1], seq_packed, out_len, index_in_array);
-}
-
-cluster_s get_hashmap_value(hm_s *self, uint64_t key, hmsize_t len_seq)
-{
-    size_t vec_index = hash_tuple_to_index(key, len_seq);
-
-    return self->vec_vec[vec_index - 1];
+    tuphash_t h1 = (tuphash_t)hashed;
+    tuphash_t h2 = (tuphash_t)(hashed >> 16);
+    
+    return h1 ^ h2;
 }
 
 void init_fifo(fifo_s *self) {
@@ -760,3 +521,97 @@ void join_fifo(fifo_s *self) {
     }
 }
 
+
+
+hm_s new_hashmap() {
+    return (hm_s){.bucket_arr=calloc(8, sizeof(bucket_s)), .n=0, .next_round=8};
+}
+
+bucket_s new_bucket(tuphash_t hash) {
+    return (bucket_s){.cluster_arr=calloc(8, sizeof(cluster_s)), .hash=hash, .n=0, .next_round=8};
+}
+
+cluster_s new_cluster(tuphash_t hash, hmsize_t len) {
+    return (cluster_s){.clusterseq_arr=calloc(8, sizeof(clusterseq_s)), .hash=hash, .len_seq=len, .n=0, .next_round=8};
+}
+
+clusterseq_s new_clusterseq(seq_t seq_packed, size_t out_len, size_t index_in_array) {
+    return (clusterseq_s){.seq_packed=seq_packed, .out_len=out_len, .index_in_array=index_in_array, .is_dup=0};
+}
+
+
+void resize_insert_bucket(hm_s *self, tuphash_t hash) {
+    tuphash_t next_round = next_round_bits16(self->n);
+
+    if (next_round > self->next_round) {
+        bucket_s *nptr = (bucket_s *)realloc(self->bucket_arr, next_round * sizeof(bucket_s));
+
+        if (!nptr) {
+            printf("Error reallcating bucket array.\n");
+            exit(ENOMEM);
+        }
+
+        self->bucket_arr = nptr;
+        self->next_round = next_round;
+    }
+
+    self->bucket_arr[self->n] = new_bucket(hash);
+    self->n++;
+}
+
+void resize_insert_cluster(bucket_s *self, tuphash_t hash, hmsize_t len) {
+    tuphash_t next_round = next_round_bits16(self->n);
+
+    if (next_round > self->next_round) {
+        bucket_s *nptr = (cluster_s *)realloc(self->cluster_arr, next_round * sizeof(bucket_s));
+
+        if (!nptr) {
+            printf("Error reallcating cluster array.\n");
+            exit(ENOMEM);
+        }
+
+        self->cluster_arr = nptr;
+        self->next_round = next_round;
+    }
+
+    self->cluster_arr[self->n] = new_cluster(hash, len);
+    self->n++;
+}
+
+void resize_insert_clusterseq(cluster_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array) {
+    tuphash_t next_round = next_round_bits16(self->n);
+
+    if (next_round > self->next_round) {
+        bucket_s *nptr = (clusterseq_s *)realloc(self->clusterseq_arr, next_round * sizeof(bucket_s));
+
+        if (!nptr) {
+            printf("Error reallcating clusterseq array.\n");
+            exit(ENOMEM);
+        }
+
+        self->clusterseq_arr = nptr;
+        self->next_round = next_round;
+    }
+
+    self->clusterseq_arr[self->n] = new_clusterseq(seq_packed, out_len, index_in_array);
+    self->n++;
+}
+
+void insert_seq_into_hashmap(hm_s *self, uint64_t key, seq_t seq, hmsize_t len_seq, hmsize_t out_len, size_t index_in_array) {
+    tuphash_t hash_bucket = hash_tuple_to_index(key, len_seq);
+    tuphash_t hash_cluster = hash_tuple_to_index(key, out_len);
+
+    if (hash_bucket > self->n) {
+        resize_insert_bucket(self, hash_bucket);
+    }
+
+    bucket_s bucket = self->bucket_arr[hash_bucket];
+
+    if (hash_cluster > bucket.n) {
+        resize_insert_cluster(&bucket, hash_cluster, len_seq);
+    }
+
+    cluster_s cluster = bucket.cluster_arr[hash_cluster];
+
+    resize_insert_clusterseq(&cluster, seq, out_len, index_in_array);
+}

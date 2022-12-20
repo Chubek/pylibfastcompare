@@ -1,7 +1,7 @@
 *.so
 env/
 .vscode/
-_*
+_fastcompare*
 *fa
 *.core
 *.out
@@ -9,3 +9,5 @@ _*
 *.json
 vgcore*
 simd.c
+
+install

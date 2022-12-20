@@ -1,5 +1,5 @@
-main_filename := fastcompare.c
-header_filename := fastcompare.h
+source_files := src/cluster.c src/hashmap.c src/utils.c src/queue.c src/fastcompare.c
+header_dir := include
 target_so := libfastcompare.so
 arch := -mavx2
 
@@ -24,18 +24,17 @@ setenvpwd:
 install_ldc:
 	ldconfig -n $(DESTDIR)$(PREFIX)/lib/
 
-install_op: libfastcompare.so
-	install -d $(DESTDIR)$(PREFIX)/lib/
-	install -m 644 $(target_so) $(DESTDIR)$(PREFIX)/lib/
-	install -d $(DESTDIR)$(PREFIX)/include/
-	install -m 644 $(header_filename) $(DESTDIR)$(PREFIX)/include/
+install_op: 
+	mv ./$(target_so) $(DESTDIR)$(PREFIX)/lib/
+	mkdir -p $(DESTDIR)$(PREFIX)/include/fastcompare
+	cp $(header_dir)/* $(DESTDIR)$(PREFIX)/include/fastcompare
 	
 
 libfastcompare:
-	$(CC) $(CFLAGS) $(main_filename)
+	$(CC) $(CFLAGS) -I$(header_dir) $(source_files)
 
 clean:
 	rm -f $(target_so)
 
 standalone:
-	gcc -mavx2 -ggdb $(main_filename)
+	gcc -mavx2 -ggdb -I$(header_dir) $(source_files)

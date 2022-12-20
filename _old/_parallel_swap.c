@@ -1,0 +1,118 @@
+/* seq must be null-terminated */
+void _hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
+{
+    if (pthread_mutex_init(&global_lock, NULL) != 0) {
+        printf("Failed to initiailize global thread lock. Exiting...\n");
+        exit(1);
+    }
+
+    pthread_t workers[NUM_PARA];
+    int nums[NUM_PARA];
+    for (int i =  0; i < NUM_PARA; i++) nums[i] = i;
+    for (int i = 0; i < NUM_PARA; i++) {
+        init_fifo(&queues[i]);
+        pthread_create(&workers[i], NULL, &parallel_pairwise_comparator, &nums[i]);
+    }
+
+    pthread_t threads[size];
+    memset(threads, 0, size * sizeof(pthread_t));
+
+    hmsize_t max = size;
+  
+    printf("Creating threads for each cluster...\n");
+    for (hmsize_t i = 0; i < size; ++i)
+    {
+        pthread_create(&threads[i], NULL, &hamming_cluster_single, &non_zero_clusters[i]);
+    }
+
+    printf("Joining threads...\n");
+    for (hmsize_t i = 0; i < size; i++) {
+        pthread_join(threads[i], NULL);
+        printf("Thread %d with size %d joined\n", i, non_zero_clusters[i].n);
+    }
+
+    pthread_mutex_destroy(&global_lock);
+    for (int i = 0; i < NUM_PARA; i++) {
+        join_fifo(&queues[i]);
+        pthread_join(workers[i], NULL);
+        printf("Worker thread %d joined, lock & cond destoryed\n", i);
+    }
+}
+
+
+
+void *_hamming_cluster_single(void *cluster_ptr)
+{
+    cluster_s *cluster = (cluster_s *)cluster_ptr;
+
+    clusterseqarr_t cluster_seqs = cluster->clusterseq_arr;
+    hmsize_t cluster_size = cluster->n;
+
+    int diff = 0;
+
+    clusterseq_s *lead;
+    clusterseq_s *candidate;
+    int i = 0;
+
+    do
+    {
+        lead = &cluster_seqs[i];
+        if (lead->is_dup)
+            continue;     
+
+        anew:   
+        int k = 0;
+        int skip_rest = 0;
+        int j = i + 1;
+
+        do 
+        {
+            if (k > NUM_PARA - 1) k = 0;
+            if (skip_rest) {
+                printf("Sequence #%d from cluster with size %d deduped\n", i, cluster->n);
+                goto anew;
+            };       
+            candidate = &cluster_seqs[j];            
+            
+            lock_fifo(&queues[k]);
+            put_fifo(&queues[k], (pairwise_s){.lead=lead, .candidate=candidate, .skip_rest=&skip_rest});
+            unlock_fifo(&queues[k]);
+
+            k++;
+
+            sleepms(1L);
+        } while (j++ < cluster_size);
+    } while (i++ < cluster_size);
+}
+
+void *parallel_pairwise_comparator(void *num) {
+    int *np = (int*)num;
+    int n = *np;
+    int diff;
+    pairwise_s curr_pair;  
+    fifo_s *q = &queues[n];
+
+    do {
+        if (q->has_member) {
+            sleepms(1L);
+            curr_pair = pop_fifo(q);
+
+            if (!curr_pair.candidate) continue;
+            if (!curr_pair.lead) continue;
+            if (curr_pair.candidate->is_dup) continue;
+
+            int diff = hamming_hseq_pair(*curr_pair.lead, *curr_pair.candidate);
+            if (diff < 2) {
+                pthread_mutex_lock(&global_lock);
+                global_out[curr_pair.candidate->index_in_array] = curr_pair.lead->index_in_array;
+                pthread_mutex_unlock(&global_lock);
+                curr_pair.candidate->is_dup = 1;
+                *curr_pair.skip_rest = 1;
+
+                sleepms(1L);
+            }
+
+        }
+    } while(!q->join);
+
+}
