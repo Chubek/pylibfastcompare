@@ -4,42 +4,52 @@
 non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
 {   
     hmsize_t next_round = 8;
-    hmsize_t size = 0;
-    cluster_s *nz_clusters= calloc(next_round, sizeof(cluster_s*));
-    
+    size_t size_realloc = next_round * sizeof(cluster_s);
+    size_t size = 0;
+
+    void *nnptr = malloc(size_realloc);
+
+    if (!nnptr) {
+        printf("Error allocating array for non-zero clsuters");
+        exit(ENOMEM);
+    }
+
+    non_zero_clusters_s ret = (non_zero_clusters_s){.clusters=nnptr, .size=0};
+  
     bucket_s curr_bucket;
     cluster_s curr_cluster;
 
-    for (int i = 0; i < hm->next_round; i++) {
+    for (tuphash_t i = 0; i < hm->next_round; i++) {
         curr_bucket = hm->bucket_arr[i];
         if (curr_bucket.n == 0) continue;
 
-        for (int j = 0; j < curr_bucket.next_round; j++) {
+        for (tuphash_t j = 0; j < curr_bucket.next_round; j++) {
             curr_cluster = curr_bucket.cluster_arr[j];
-            if (curr_cluster.n < 2) continue;
+            if (curr_cluster.n < 2 || curr_cluster.n > HASH_MAX) continue;  
 
-            nz_clusters[size] = curr_cluster;
-
-            size++;
-
-            if (size > next_round) {
-                next_round += 8;
-                cluster_s *nptr = (cluster_s *)realloc(nz_clusters, next_round * sizeof(cluster_s));
+            hmsize_t new_round = next_round_bits16(size);
+            if (new_round > next_round) {
+                next_round = new_round;
+                size_realloc = next_round * sizeof(cluster_s);
+                void *nptr = realloc(ret.clusters, size_realloc);
 
                 if (!nptr) {
                     printf("Error reallocating non-zero clusters array.\n");
                     exit(ENOMEM);
                 }
 
-                nz_clusters = nptr;
-            }
+                ret.clusters = nptr;
+            }        
+            ret.clusters[ret.size] = curr_cluster;
+            ret.size++;
+
         }
     }
 
 
-    printf("Got %u non-zero clusters\n", size);
+    printf("Got %lu non-zero clusters\n", size);
 
-    return (non_zero_clusters_s){.clusters=nz_clusters, .size=size};
+    return ret;
 }
 
 

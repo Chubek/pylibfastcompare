@@ -3,9 +3,17 @@ header_dir := include
 target_so := libfastcompare.so
 arch := -mavx2
 
-CC = $(COMP)
-CFLAGS = $(arch) $(DEBUG) -shared -o $(target_so) -fPIC
+ifeq ($(ASAN),1)
+	asan := -fsanitize=address -g
+	export LD_PRELOAD=$(ASAN_LD)
+endif
 
+ifeq ($(DEBUG),1)
+	debug := -ggdb3
+endif
+
+CC = $(COMP)
+CFLAGS = $(arch) $(debug) -shared -o $(target_so) $(asan) -fPIC
 
 ifeq ($(PREFIX),)
     PREFIX := /usr/local
@@ -31,7 +39,7 @@ install_op:
 	
 
 libfastcompare:
-	$(CC) $(CFLAGS) -I$(header_dir) $(source_files)
+	$(CC) $(CFLAGS) -I$(header_dir) $(source_files) 
 
 clean:
 	rm -f $(target_so)

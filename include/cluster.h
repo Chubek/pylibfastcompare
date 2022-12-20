@@ -1,5 +1,5 @@
 typedef struct NonZeroClusters {
-    clusterarr_t clusters;
+    cluster_s *clusters;
     tuphash_t size;
 } non_zero_clusters_s;
 
