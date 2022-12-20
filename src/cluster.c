@@ -5,7 +5,6 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
 {   
     hmsize_t next_round = 8;
     size_t size_realloc = next_round * sizeof(cluster_s);
-    size_t size = 0;
 
     void *nnptr = malloc(size_realloc);
 
@@ -27,7 +26,7 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
             curr_cluster = curr_bucket.cluster_arr[j];
             if (curr_cluster.n < 2 || curr_cluster.n > HASH_MAX) continue;  
 
-            hmsize_t new_round = next_round_bits16(size);
+            hmsize_t new_round = next_round_bits16(ret.size);
             if (new_round > next_round) {
                 next_round = new_round;
                 size_realloc = next_round * sizeof(cluster_s);
@@ -47,7 +46,7 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
     }
 
 
-    printf("Got %lu non-zero clusters\n", size);
+    printf("Got %d non-zero clusters\n", ret.size);
 
     return ret;
 }

@@ -11,7 +11,7 @@
 typedef uint8_t chartype_t;
 typedef uint64_t outtype_t;
 typedef uint8_t hamtype_t;
-typedef uint32_t tuphash_t;
+typedef uint16_t tuphash_t;
 typedef uint8_t* seq_t;
 typedef uint32_t hmsize_t;
 
