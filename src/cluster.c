@@ -212,7 +212,7 @@ void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k)
 
     key ^= djb >> 48;
 
-    insert_seq_into_hashmap(self, key, seq, len_seq, size_out, index_in_array);
+    insert_seq_into_hashmap(self, key, out, len_seq, size_out, index_in_array);
 }
 
 hm_s cluster_seqs(chartype_t **seqs_in, size_t num_seqs, int k)
