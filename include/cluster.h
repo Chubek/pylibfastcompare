@@ -4,8 +4,8 @@ typedef struct NonZeroClusters {
 } non_zero_clusters_s;
 
 non_zero_clusters_s filter_out_zero_clusters(hm_s *hm);
-hm_s cluster_seqs(chartype_t **seqs_in, size_t num_seqs, int k);
-void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k);
+hm_s cluster_seqs(chartype_t *seqs, int *len_seqs, size_t num_seqs, int k);
+void insert_seq_in_hm(hm_s *self, chartype_t *seq, int len_seq, size_t index_in_array, int k);
 uint64_t get_kmer_key(seq_t out, int size_out, int k);
 uint64_t merge_freqs(int freqs[256]);
 uint64_t murmurhash(const uint64_t key, int non_zero, uint32_t seed);

@@ -46,3 +46,16 @@ void quicksort(chartype_t *in, int curr_l, int curr_h)
         quicksort(in, partition_index + 1, curr_h);
     }
 }
+
+
+int max_len(int *lens, int size) {
+    int max = 0;
+
+    for (int i = 0; i < size; i++) {
+        if (lens[i] > max) {
+            max = lens[i];
+        }
+    }
+
+    return max;
+}

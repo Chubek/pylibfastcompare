@@ -28,11 +28,11 @@ int *global_out;
 fifo_s queues[NUM_PARA];
 pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
 
-void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
+void cluster_ham_and_mark(chartype_t *seq, int *lens, size_t num_seqs, int k, int out[])
 {
     global_out = out;
     printf("Clustering...\n");    
-    hm_s clustered = cluster_seqs(seqs, num_seqs, K);
+    hm_s clustered = cluster_seqs(seq, lens, num_seqs, K);
 
     printf("Done, getting non-szero and non-one clusters...\n");
     non_zero_clusters_s non_zeroes = filter_out_zero_clusters(&clustered);
@@ -131,7 +131,7 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
     int diff = 0;
     int new_diff = 0;
 
-    if (a.out_len > 10000 || b.out_len > 10000) return 0;
+    if (a.out_len > 10000 || b.out_len > 10000 || a.out_len != b.out_len) return 0;
 
     hamtype_t a_buffer[SIZE_HAM];
     hamtype_t b_buffer[SIZE_HAM];
@@ -139,7 +139,7 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
 
     seq_t a_seq = a.seq_packed;
     seq_t b_seq = b.seq_packed;
-    int out_len = strlen(a_seq);
+    int out_len = a.out_len;
 
     for (size_t i = 0; i < out_len; i += SIZE_HAM)
     {

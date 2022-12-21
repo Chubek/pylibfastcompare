@@ -6,7 +6,7 @@ ffi = cffi.FFI()
 ffi.cdef("""   
     typedef uint8_t chartype_t;
 
-    void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[]);
+    void cluster_ham_and_mark(chartype_t *seqs, int *len_seqs, size_t num_seqs, int k, int out[]);
     """, override=True)
 
 ffi.set_source("_fastcompare",

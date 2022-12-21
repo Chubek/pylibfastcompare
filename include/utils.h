@@ -14,3 +14,4 @@ void quicksort(chartype_t *in, int curr_l, int curr_h);
 int quicksort_partition(chartype_t *in, int curr_l, int curr_h);
 void swap(chartype_t *in, int i, int j);
 int sleepms(long miliseconds);
+int max_len(int *lens, int size);

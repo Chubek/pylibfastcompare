@@ -5,6 +5,7 @@ from os import environ
 from threading import Thread
 from time import time
 from typing import Any, Dict, List, Tuple
+import numpy as np
 
 import cffi
 from Bio.SeqIO.FastaIO import SimpleFastaParser
@@ -13,18 +14,29 @@ from _fastcompare import lib
 
 ffi = cffi.FFI()
 
+K = 4
     
 def seqs_bytes(
     path: str,
     thread_div: int
-) -> Tuple[List[Tuple[Tuple[str, str], bytearray]], int]:
-    list_bytes = []
+) -> Tuple[bytearray, List[int], List[Tuple[str, str]], int]:
     rec_reader = SimpleFastaParser(open(path, "r"))
-    
-    for header, seq in rec_reader:
-        list_bytes.append(((header, seq), ffi.new("char[]", (seq.encode('ascii') + '\0'.encode('ascii')))))
+    header_seq = []
+    n = 0
+    seq = b""
+    lengths = []
 
-    return list_bytes, len(list_bytes)
+    for header, seq_ in rec_reader:
+        seq += seq_.encode('ascii')
+        lengths.append(len(seq_))
+
+        header_seq.append((header, seq_))
+        n += 1
+    
+    buffer = np.frombuffer(seq, dtype=np.uint8)
+    buffer = ffi.from_buffer(buffer)
+
+    return buffer, lengths, header_seq, n
 
 def assembler_worker(size: int, start: int, end: int, heads_seqs: List[Tuple[str, str]], arr_in: List[int], dict_out: Dict[str, Dict[str, str]]): 
     for i in range(start, end):
@@ -43,18 +55,17 @@ def assembler_worker(size: int, start: int, end: int, heads_seqs: List[Tuple[str
 def run_libfastcompare(path: str, thread_div: int):
     print('Reading, getting bytes...')
     t = time()
-    bytes_, size = seqs_bytes(path, thread_div)
+    buffer, lengths, hseqs, size = seqs_bytes(path, thread_div)
     print(f"Got {size} char arrs. Took {time() - t} seconds")
     out = ffi.new("int[]", [-1] * size)
     t = time()
     print("Getting hamming with FFI...")
-    lib.cluster_ham_and_mark(list(map(lambda x: x[-1], bytes_)), size, 4, out)
+    lib.cluster_ham_and_mark(buffer, lengths, size, K, out)
     out = [i for i in out]
     print(out)
     print(f"Done deduping. Took {time() - t} seconds. Exporting results...")
     print(f"Found {len([i for i in out if i != -1])} dups")
     
-    hseqs = list(map(lambda x: x[0], bytes_))
     thrds = []
     ret = {"Clean": {}, "Dupes": {}}
 
