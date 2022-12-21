@@ -1,7 +1,15 @@
+typedef struct NonZeroCluster {
+    clusterseq_s *clusterseq_arr;
+    uint32_t n;
+} non_zero_cluster_s;
+
 typedef struct NonZeroClusters {
-    cluster_s *clusters;
+    cluster_s *nz_clusters;
     tuphash_t size;
 } non_zero_clusters_s;
+
+#define SZ_NZC sizeof(non_zero_cluster_s)
+#define SZ_NZS sizeof(non_zero_clusters_s)
 
 #define SZ_CLST sizeof(cluster_s)
 

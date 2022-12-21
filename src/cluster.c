@@ -3,16 +3,9 @@
 
 non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
 {      
-    int size_arr = 1;
-    void *nnptr = calloc(size_arr, SZ_CLST);
-
-    if (!nnptr) {
-        printf("Error allocating array for non-zero clsuters");
-        exit(ENOMEM);
-    }
-
-    non_zero_clusters_s ret = (non_zero_clusters_s){.clusters=nnptr, .size=0};
-  
+    int size_clusters = 0;
+    cluster_s *nz_clusters = NULL;
+    
     bucket_s curr_bucket;
     cluster_s curr_cluster;
 
@@ -20,34 +13,30 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
         if (hm->occupied[i] != OCCUPIED) continue;
 
         curr_bucket = hm->bucket_arr[i];
-        if (curr_bucket.n == 0) continue;
-
+        if (curr_bucket.n == 2) continue;
+               
         for (tuphash_t j = 0; j < BUCKET_HASH_MAX; j++) {
-            if (curr_bucket.occuped[i] != OCCUPIED) continue;
+            if (curr_bucket.occuped[j] != OCCUPIED) continue;
             
             curr_cluster = curr_bucket.cluster_arr[j];
-            if (curr_cluster.n < 2) continue;  
-            
-            if (ret.size > size_arr) {
-                size_arr = ret.size;
+            if (curr_cluster.n < 2) continue;         
 
-                void *nptr = realloc(ret.clusters, size_arr * SZ_CLST);
+           cluster_s *nnptr = (cluster_s *)realloc(nz_clusters, ++size_clusters * sizeof(non_zero_cluster_s));
 
-                if (!nptr) {
-                    printf("Error reallocating non-zero clusters array.\n");
-                    exit(ENOMEM);
-                }
+            if (!nnptr) {
+                printf("Error reallocating NZ clusters.\n");
+                exit(ENOMEM);
+            }
 
-                ret.clusters = nptr;
-            }        
-            ret.clusters[ret.size] = curr_cluster;
-            ret.size++;
+            nz_clusters = nnptr;        
+            nz_clusters[size_clusters - 1] = curr_cluster;
+
         }
     }
 
 
-    printf("Got %d non-zero clusters\n", ret.size);
-    return ret;
+    printf("Got %d non-zero clusters\n", size_clusters);
+    return (non_zero_clusters_s){.nz_clusters=nz_clusters, .size=size_clusters};
 }
 
 

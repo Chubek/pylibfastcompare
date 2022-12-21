@@ -91,16 +91,14 @@ void init_cluster(bucket_s *self, buckethash_t hash, hmsize_t len) {
 
 void resize_insert_clusterseq(cluster_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array) {
     clusterseq_s *nptr = (clusterseq_s *)realloc(self->clusterseq_arr, ++self->n * SZ_CLSQ);
-
+    
     if (!nptr) {
         printf("Error reallcating clusterseq array.\n");
         exit(ENOMEM);
     }
 
-    self->clusterseq_arr = nptr;
-
+    self->clusterseq_arr = nptr;    
     new_clusterseq(&self->clusterseq_arr[self->n - 1], seq_packed, out_len, index_in_array);
-    self->n++;
 }
 
 void insert_seq_into_hashmap(hm_s *self, uint64_t key, seq_t seq, hmsize_t len_seq, hmsize_t out_len, size_t index_in_array) {

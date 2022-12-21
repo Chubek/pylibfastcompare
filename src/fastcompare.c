@@ -38,12 +38,12 @@ void cluster_ham_and_mark(chartype_t *seq, int *lens, size_t num_seqs, int k, in
     non_zero_clusters_s non_zeroes = filter_out_zero_clusters(&clustered);
     
     printf("Doing hamming...\n");
-    hamming_clusters_hm(non_zeroes.clusters, non_zeroes.size); 
+    hamming_clusters_hm(non_zeroes.nz_clusters, non_zeroes.size); 
 
     printf("Fully done!\n");
 }
 
-void hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
+void hamming_clusters_hm(cluster_s *non_zero_clusters, tuphash_t size)
 {
     if (pthread_mutex_init(&global_lock, NULL) != 0) {
         printf("Failed to initiailize global thread lock. Exiting...\n");
@@ -96,6 +96,8 @@ void *hamming_cluster_single(void *cluster_ptr)
         diff = 0;
         int j = i + 1 + ahead;
 
+        if (j >= cluster_size) goto set_ahead;
+        
         do 
         {
             candidate = &cluster_seqs[j];      
@@ -114,9 +116,11 @@ void *hamming_cluster_single(void *cluster_ptr)
                 goto anew;
             }
             
-        } while (j++ < cluster_size);
+        } while (j++ < cluster_size + 1);
+
+        set_ahead:
         ahead = 0;
-    } while (i++ < cluster_size);
+    } while (i++ < cluster_size + 1);
 
     for (int i = 0; i < cluster_size; i++) {
         free(cluster->clusterseq_arr[i].seq_packed);
@@ -150,8 +154,8 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
         
         max_len = out_len - diffed_len >= SIZE_HAM ? SIZE_HAM : out_len - diffed_len;
 
-        for (int j = 0; j < max_len; j++) a_buffer[i] = a_seq[i + j];
-        for (int j = 0; j < max_len; j++) b_buffer[i] = b_seq[i + j];
+        for (int j = 0; j < max_len; j++) a_buffer[j] = a_seq[i + j];
+        for (int j = 0; j < max_len; j++) b_buffer[j] = b_seq[i + j];
 
         new_diff = get_hamming_integers(a_buffer, b_buffer);
         diff += new_diff;
