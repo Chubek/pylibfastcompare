@@ -21,14 +21,14 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
             curr_cluster = curr_bucket.cluster_arr[j];
             if (curr_cluster.n < 2) continue;         
 
-           cluster_s *nnptr = (cluster_s *)realloc(nz_clusters, ++size_clusters * sizeof(non_zero_cluster_s));
+           cluster_s *nnptr = (cluster_s *)realloc(nz_clusters, ++size_clusters * SZ_CLST);
 
             if (!nnptr) {
                 printf("Error reallocating NZ clusters.\n");
                 exit(ENOMEM);
             }
-
-            nz_clusters = nnptr;        
+            
+            nz_clusters = nnptr;    
             nz_clusters[size_clusters - 1] = curr_cluster;
 
         }

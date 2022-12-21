@@ -27,10 +27,12 @@ const uint8_t lookup_num_diffs[257] = {
 int *global_out;
 fifo_s queues[NUM_PARA];
 pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
+int size_arr = 0;
 
 void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
 {   
     global_out = out;
+    size_arr = num_seqs;
 
     printf("Clustering...\n");    
     hm_s clustered = cluster_seqs(seqs, num_seqs, K);
@@ -69,8 +71,6 @@ void hamming_clusters_hm(cluster_s *non_zero_clusters, tuphash_t size)
     }
 
     pthread_mutex_destroy(&global_lock);
-
-    free(non_zero_clusters);
 }
 
 
@@ -95,6 +95,7 @@ void *hamming_cluster_single(void *cluster_ptr)
 
         if (!lead) continue;
         if (!lead->seq_packed) continue;
+        if (lead->index_in_array >= size_arr) continue;
         if (lead->is_dup == 1) continue;
        
         anew:   
@@ -109,6 +110,7 @@ void *hamming_cluster_single(void *cluster_ptr)
 
             if (!candidate) continue;
             if (!candidate->seq_packed) continue;
+            if (candidate->index_in_array >= size_arr) continue;
             if (candidate->is_dup == 1) continue;
 
             diff = hamming_hseq_pair(*lead, *candidate);
@@ -126,11 +128,7 @@ void *hamming_cluster_single(void *cluster_ptr)
 
         set_ahead:
         ahead = 0;
-    } while (i++ < cluster_size);
-
-    for (int i = 0; i < cluster_size; i++) {
-        free(cluster->clusterseq_arr[i].seq_packed);
-    }
+    } while (i++ < cluster_size); 
 }
 
 
