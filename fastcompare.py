@@ -21,22 +21,21 @@ def seqs_bytes(
     thread_div: int
 ) -> Tuple[bytearray, List[int], List[Tuple[str, str]], int]:
     rec_reader = SimpleFastaParser(open(path, "r"))
-    header_seq = []
-    n = 0
-    seq = b""
     lengths = []
+    header_seqs = list(rec_reader)
+    seqs = list(map(lambda x: x[1], header_seqs))
+    seq = "".join(seqs).encode('ascii')
+    n = len(seqs)
 
-    for header, seq_ in rec_reader:
-        seq += seq_.encode('ascii')
-        lengths.append(len(seq_))
-
-        header_seq.append((header, seq_))
-        n += 1
+    
+    with ThreadPoolExecutor(thread_div) as pool:
+        for l in pool.map(len, seqs):
+            lengths.append(l)
     
     buffer = np.frombuffer(seq, dtype=np.uint8)
     buffer = ffi.from_buffer(buffer)
 
-    return buffer, lengths, header_seq, n
+    return buffer, lengths, header_seqs, n
 
 def assembler_worker(size: int, start: int, end: int, heads_seqs: List[Tuple[str, str]], arr_in: List[int], dict_out: Dict[str, Dict[str, str]]): 
     for i in range(start, end):

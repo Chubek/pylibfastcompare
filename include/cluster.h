@@ -3,6 +3,8 @@ typedef struct NonZeroClusters {
     tuphash_t size;
 } non_zero_clusters_s;
 
+#define SZ_CLST sizeof(cluster_s)
+
 non_zero_clusters_s filter_out_zero_clusters(hm_s *hm);
 hm_s cluster_seqs(chartype_t *seqs, int *len_seqs, size_t num_seqs, int k);
 void insert_seq_in_hm(hm_s *self, chartype_t *seq, int len_seq, size_t index_in_array, int k);

@@ -14,6 +14,7 @@ typedef uint8_t hamtype_t;
 typedef uint16_t tuphash_t;
 typedef uint8_t* seq_t;
 typedef uint32_t hmsize_t;
+typedef uint8_t buckethash_t;
 
 #include "hashmap.h"
 #include "queue.h"

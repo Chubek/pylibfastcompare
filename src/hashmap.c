@@ -21,7 +21,7 @@ tuphash_t next_round_bits16(tuphash_t n)
     return rounded_up;
 }
 
-tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len)
+tuphash_t hash_tuple_to_hm_index(uint64_t x, hmsize_t len)
 {
     hmsize_t hash_x = hash_bits(x);
     hmsize_t hashed = (tuphash_t)((((hash_x ^ PYHASH_X) % PYHASH_REM1) ^ (PYHASH_X ^ (len >> 2))) % (PYHASH_REM2));
@@ -34,127 +34,89 @@ tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len)
     return h1 ^ h2;
 }
 
+buckethash_t hash_tuple_to_bucket_index(uint64_t x, hmsize_t len) {
+    tuphash_t hash_x = hash_bits(x);
+    tuphash_t hashed = (tuphash_t)((((hash_x ^ PYHASH_X) % PYHASH_REM1) ^ (PYHASH_X ^ (len >> 2))) % (PYHASH_REM2));
+    
+    hashed = ((hashed % BUCKET_HASH_MAX) + 1);
+
+    buckethash_t lower_four_bits = hashed << 14;
+    buckethash_t upper_four_bits = hashed >> 14;
+
+    return ((buckethash_t)hashed & 0xFF) ^ (~lower_four_bits & upper_four_bits);
+}
+
 
 hm_s new_hashmap() {
-    return (hm_s){.bucket_arr=calloc(HASH_MAX, sizeof(bucket_s)), .n=0, .next_round=HASH_MAX};
+    hm_s hm = (hm_s){.bucket_arr=calloc(HASH_MAX, SZ_BUCKET), .n=0};
+    memset(hm.occupied, 0, HASH_MAX);
+
+    return hm;
 }
 
-bucket_s new_bucket(tuphash_t hash) {
-    return (bucket_s){.cluster_arr=calloc(HASH_MAX, sizeof(cluster_s)), .hash=hash, .n=0, .next_round=HASH_MAX, .set_fifty=50};
+void new_bucket(bucket_s *self, tuphash_t hash) {
+    self->cluster_arr = calloc(BUCKET_HASH_MAX, SZ_CLST);
+    self->hash = hash;
+    self->n = 0;
+
+    memset(self->occuped, 0, BUCKET_HASH_MAX);
 }
 
-cluster_s new_cluster(tuphash_t hash, hmsize_t len) {
-    return (cluster_s){.clusterseq_arr=calloc(8, sizeof(clusterseq_s)), .hash=hash, .len_seq=len, .n=0, .next_round=8, .set_fifty=50};
+void new_cluster(cluster_s *self, buckethash_t hash, hmsize_t len) {
+    self->clusterseq_arr = NULL;
+    self->hash = hash;
+    self->len_seq = len;
+    self->n = 0;
 }
 
-clusterseq_s new_clusterseq(seq_t seq_packed, size_t out_len, size_t index_in_array) {
-    return (clusterseq_s){.seq_packed=seq_packed, .out_len=out_len, .index_in_array=index_in_array, .is_dup=0, .set_fifty=50};
+void new_clusterseq(clusterseq_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array) {
+    self->seq_packed = seq_packed;
+    self->out_len = out_len;
+    self->index_in_array = index_in_array;
+    self->is_dup = 0;
 }
 
 
-void free_clusterseq(clusterseq_s *self) {
-    free(self->seq_packed);
-}
-
-void free_cluster(cluster_s *self) {
-    for (int i = 0; i < self->next_round; i++) {
-        if (self->set_fifty != 50) continue;
-        free_clusterseq(&self->clusterseq_arr[i]);
-    }
-
-}
-
-void free_bucket(bucket_s *self) {
-    for (int i = 0; i < self->next_round; i++) {
-        if (self->set_fifty != 50) continue;
-        free_cluster(&self->cluster_arr[i]);
-    }
-
-}
-
-void free_hashmap(hm_s *self) {
-    for (int i = 0; i < self->next_round; i++) {
-        free_bucket(&self->bucket_arr[i]);
-    }
-}
-
-void resize_insert_bucket(hm_s *self, tuphash_t hash) {
-    tuphash_t next_round = next_round_bits16(hash);
-
-    if (next_round > self->next_round) {
-        bucket_s *nptr = (bucket_s *)realloc(self->bucket_arr, next_round * sizeof(bucket_s));
-
-        if (!nptr) {
-            printf("Error reallcating bucket array.\n");
-            exit(ENOMEM);
-        }
-
-        self->bucket_arr = nptr;
-        self->next_round = next_round;
-    }
-
-    self->bucket_arr[hash - 1] = new_bucket(hash);
+void init_bucket(hm_s *self, tuphash_t hash) {
+    new_bucket(&self->bucket_arr[hash - 1], hash);
+    self->occupied[hash - 1] = OCCUPIED;
     self->n++;
 }
 
-void resize_insert_cluster(bucket_s *self, tuphash_t hash, hmsize_t len) {
-    tuphash_t next_round = next_round_bits16(hash);
-
-    if (next_round > self->next_round) {
-        cluster_s  *nptr = (cluster_s *)realloc(self->cluster_arr, next_round * sizeof(bucket_s));
-
-        if (!nptr) {
-            printf("Error reallcating cluster array.\n");
-            exit(ENOMEM);
-        }
-
-        self->cluster_arr = nptr;
-        self->next_round = next_round;
-    }
-
-    self->cluster_arr[hash - 1] = new_cluster(hash, len);
+void init_cluster(bucket_s *self, buckethash_t hash, hmsize_t len) {
+    new_cluster(&self->cluster_arr[hash - 1], hash, len);
+    self->occuped[hash - 1] = OCCUPIED;
     self->n++;
 }
 
 void resize_insert_clusterseq(cluster_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array) {
-    tuphash_t next_round = next_round_bits16(self->n);
+    clusterseq_s *nptr = (clusterseq_s *)realloc(self->clusterseq_arr, ++self->n * SZ_CLSQ);
 
-    if (next_round > self->next_round) {
-        clusterseq_s *nptr = (clusterseq_s *)realloc(self->clusterseq_arr, next_round * sizeof(bucket_s));
-
-        if (!nptr) {
-            printf("Error reallcating clusterseq array.\n");
-            exit(ENOMEM);
-        }
-
-        self->clusterseq_arr = nptr;
-        self->next_round = next_round;
+    if (!nptr) {
+        printf("Error reallcating clusterseq array.\n");
+        exit(ENOMEM);
     }
 
-    self->clusterseq_arr[self->n] = new_clusterseq(seq_packed, out_len, index_in_array);
+    self->clusterseq_arr = nptr;
+
+    new_clusterseq(&self->clusterseq_arr[self->n - 1], seq_packed, out_len, index_in_array);
     self->n++;
 }
 
 void insert_seq_into_hashmap(hm_s *self, uint64_t key, seq_t seq, hmsize_t len_seq, hmsize_t out_len, size_t index_in_array) {
-    tuphash_t hash_bucket = hash_tuple_to_index(key, len_seq);
-    tuphash_t hash_cluster = hash_tuple_to_index(key, out_len);
-
-    if (hash_bucket > self->next_round) {
-        resize_insert_bucket(self, hash_bucket);
-    }
-
+    tuphash_t hash_bucket = hash_tuple_to_hm_index(key, len_seq);
+    buckethash_t hash_cluster = hash_tuple_to_bucket_index(key, out_len);
+    
     bucket_s *bucket = &self->bucket_arr[hash_bucket - 1];
-    bucket->hash = hash_bucket;
-    bucket->set_fifty = 50;
-
-    if (hash_cluster > bucket->next_round) {
-        resize_insert_cluster(bucket, hash_cluster, len_seq);
+    if (self->occupied[hash_bucket - 1] != OCCUPIED) {
+        init_bucket(self, hash_bucket);
     }
 
     cluster_s *cluster = &bucket->cluster_arr[hash_cluster - 1];
-    cluster->hash = hash_cluster;
-    cluster->set_fifty = 50;
-
+    if (bucket->occuped[hash_cluster - 1] != OCCUPIED) {
+        init_cluster(bucket, hash_cluster, len_seq);
+    }
 
     resize_insert_clusterseq(cluster, seq, out_len, index_in_array);
 }
+

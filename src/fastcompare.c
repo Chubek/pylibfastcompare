@@ -80,8 +80,8 @@ void *hamming_cluster_single(void *cluster_ptr)
 
     int diff = 0;
 
-    clusterseq_s *lead;
-    clusterseq_s *candidate;
+    clusterseq_s *lead = NULL;
+    clusterseq_s *candidate = NULL;
     int i = 0;
     int ahead = 0;
 
@@ -91,7 +91,6 @@ void *hamming_cluster_single(void *cluster_ptr)
 
         if (!lead) continue;
         if (!lead->seq_packed) continue;
-        if (lead->set_fifty != 50) continue;
        
         anew:   
         diff = 0;
@@ -103,7 +102,6 @@ void *hamming_cluster_single(void *cluster_ptr)
 
             if (!candidate) continue;
             if (!candidate->seq_packed) continue;
-            if (candidate->set_fifty != 50) continue;
 
             diff = hamming_hseq_pair(*lead, *candidate);
 
@@ -131,7 +129,7 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
     int diff = 0;
     int new_diff = 0;
 
-    if (a.out_len > 10000 || b.out_len > 10000 || a.out_len != b.out_len) return 0;
+    if (a.out_len != b.out_len) return 0;
 
     hamtype_t a_buffer[SIZE_HAM];
     hamtype_t b_buffer[SIZE_HAM];
@@ -141,17 +139,24 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
     seq_t b_seq = b.seq_packed;
     int out_len = a.out_len;
 
+    int max_len = 32;
+    int diffed_len = 0;
+
     for (size_t i = 0; i < out_len; i += SIZE_HAM)
     {
 
         memset(a_buffer, 0, num_bytes);
         memset(b_buffer, 0, num_bytes);        
         
-        for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) a_buffer[i] = a_seq[i + j];
-        for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) b_buffer[i] = b_seq[i + j];
+        max_len = out_len - diffed_len >= SIZE_HAM ? SIZE_HAM : out_len - diffed_len;
+
+        for (int j = 0; j < max_len; j++) a_buffer[i] = a_seq[i + j];
+        for (int j = 0; j < max_len; j++) b_buffer[i] = b_seq[i + j];
 
         new_diff = get_hamming_integers(a_buffer, b_buffer);
         diff += new_diff;
+
+        diffed_len += SIZE_HAM;
     }
  
     return diff;

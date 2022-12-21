@@ -2,11 +2,9 @@
 
 
 non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
-{   
-    hmsize_t next_round = 8;
-    size_t size_realloc = next_round * sizeof(cluster_s);
-
-    void *nnptr = malloc(size_realloc);
+{      
+    int size_arr = 1;
+    void *nnptr = calloc(size_arr, SZ_CLST);
 
     if (!nnptr) {
         printf("Error allocating array for non-zero clsuters");
@@ -18,19 +16,22 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
     bucket_s curr_bucket;
     cluster_s curr_cluster;
 
-    for (tuphash_t i = 0; i < hm->next_round; i++) {
+    for (tuphash_t i = 0; i < HASH_MAX; i++) {
+        if (hm->occupied[i] != OCCUPIED) continue;
+
         curr_bucket = hm->bucket_arr[i];
-        if (curr_bucket.n == 0 || curr_bucket.set_fifty != 50) continue;
+        if (curr_bucket.n == 0) continue;
 
-        for (tuphash_t j = 0; j < curr_bucket.next_round; j++) {
+        for (tuphash_t j = 0; j < BUCKET_HASH_MAX; j++) {
+            if (curr_bucket.occuped[i] != OCCUPIED) continue;
+            
             curr_cluster = curr_bucket.cluster_arr[j];
-            if (curr_cluster.n < 2 || curr_cluster.set_fifty != 50) continue;  
+            if (curr_cluster.n < 2) continue;  
+            
+            if (ret.size > size_arr) {
+                size_arr = ret.size;
 
-            hmsize_t new_round = next_round_bits16(ret.size);
-            if (new_round > next_round) {
-                next_round = new_round;
-                size_realloc = next_round * sizeof(cluster_s);
-                void *nptr = realloc(ret.clusters, size_realloc);
+                void *nptr = realloc(ret.clusters, size_arr * SZ_CLST);
 
                 if (!nptr) {
                     printf("Error reallocating non-zero clusters array.\n");
@@ -41,13 +42,11 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
             }        
             ret.clusters[ret.size] = curr_cluster;
             ret.size++;
-
         }
     }
 
 
     printf("Got %d non-zero clusters\n", ret.size);
-
     return ret;
 }
 
@@ -210,7 +209,7 @@ uint64_t djb2(seq_t seq, int size) {
 void insert_seq_in_hm(hm_s *self, chartype_t *seq, int len_seq, size_t index_in_array, int k)
 {
     int size_out = (len_seq / k);
-    seq_t out = (seq_t)calloc(size_out, sizeof(chartype_t));
+    seq_t out = (seq_t)calloc(size_out + 1, sizeof(chartype_t));
 
     get_kmers(seq, out, len_seq, k);
     uint64_t key = get_kmer_key(out, size_out, k);
