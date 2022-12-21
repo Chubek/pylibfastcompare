@@ -95,6 +95,7 @@ void *hamming_cluster_single(void *cluster_ptr)
 
         if (!lead) continue;
         if (!lead->seq_packed) continue;
+        if (lead->is_dup == 1) continue;
        
         anew:   
         diff = 0;
@@ -108,6 +109,7 @@ void *hamming_cluster_single(void *cluster_ptr)
 
             if (!candidate) continue;
             if (!candidate->seq_packed) continue;
+            if (candidate->is_dup == 1) continue;
 
             diff = hamming_hseq_pair(*lead, *candidate);
 
@@ -120,11 +122,11 @@ void *hamming_cluster_single(void *cluster_ptr)
                 goto anew;
             }
             
-        } while (j++ < cluster_size + 1);
+        } while (j++ < cluster_size);
 
         set_ahead:
         ahead = 0;
-    } while (i++ < cluster_size + 1);
+    } while (i++ < cluster_size);
 
     for (int i = 0; i < cluster_size; i++) {
         free(cluster->clusterseq_arr[i].seq_packed);
