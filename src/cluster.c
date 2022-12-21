@@ -91,13 +91,20 @@ void get_kmers(chartype_t *in, chartype_t out[], int size, int k)
     }
 
     char buffer[32];
+    int max_len = 0;
+    int diffed_len = 0;
 
-    for (int i = 0; i < size; i += 32)
+    for (int i = 0; i < size; i += SIZE_CHARS)
     {
         memset(buffer, 0, 32);
-        for (int j = 0; j < 32; j++) buffer[j] = in[j + i];
+
+        max_len = size - diffed_len >= SIZE_CHARS ? SIZE_CHARS : size - diffed_len;
+
+        for (int j = 0; j < max_len; j++) buffer[j] = in[j + i];
 
         and_buffer(buffer, out, i, size, k);
+
+        diffed_len += SIZE_CHARS;
     }
 }
 
@@ -195,8 +202,9 @@ uint64_t djb2(seq_t seq, int size) {
     return hash;
 }
 
-void insert_seq_in_hm(hm_s *self, chartype_t *seq, int len_seq, size_t index_in_array, int k)
+void insert_seq_in_hm(hm_s *self, chartype_t *seq, size_t index_in_array, int k)
 {
+    int len_seq = strlen(seq);
     int size_out = (len_seq / k);
     seq_t out = (seq_t)calloc(size_out + 1, sizeof(chartype_t));
 
@@ -207,26 +215,15 @@ void insert_seq_in_hm(hm_s *self, chartype_t *seq, int len_seq, size_t index_in_
     key ^= djb >> 48;
 
     insert_seq_into_hashmap(self, key, out, len_seq, size_out, index_in_array);
-
-    free(seq);
 }
 
-hm_s cluster_seqs(chartype_t *seqs, int *len_seqs, size_t num_seqs, int k)
+hm_s cluster_seqs(chartype_t **seqs, size_t num_seqs, int k)
 {
     hm_s hm = new_hashmap();
-
-    int max_length = max_len(len_seqs, num_seqs);
-    max_length = max_length + (max_length % 256);    
-    int header = 0;
     
     for (int i = 0; i < num_seqs; i++)
     {
-        chartype_t *curr_seq = (chartype_t*)calloc(max_length, 1);
-        memcpy(curr_seq, &seqs[header], len_seqs[i]);
-
-        insert_seq_in_hm(&hm, curr_seq, len_seqs[i], i, k);
-
-        header += len_seqs[i];
+        insert_seq_in_hm(&hm, seqs[i], i, k);
     }
 
     return hm;

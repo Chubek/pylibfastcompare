@@ -28,11 +28,12 @@ int *global_out;
 fifo_s queues[NUM_PARA];
 pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
 
-void cluster_ham_and_mark(chartype_t *seq, int *lens, size_t num_seqs, int k, int out[])
-{
+void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
+{   
     global_out = out;
+
     printf("Clustering...\n");    
-    hm_s clustered = cluster_seqs(seq, lens, num_seqs, K);
+    hm_s clustered = cluster_seqs(seqs, num_seqs, K);
 
     printf("Done, getting non-szero and non-one clusters...\n");
     non_zero_clusters_s non_zeroes = filter_out_zero_clusters(&clustered);
@@ -52,7 +53,7 @@ void hamming_clusters_hm(cluster_s *non_zero_clusters, tuphash_t size)
  
 
     pthread_t threads[size];
-   memset(threads, 0, size * sizeof(pthread_t));
+    memset(threads, 0, size * sizeof(pthread_t));
 
     hmsize_t max = size;
   
@@ -65,8 +66,11 @@ void hamming_clusters_hm(cluster_s *non_zero_clusters, tuphash_t size)
     printf("Joining threads...\n");
     for (hmsize_t i = 0; i < size; i++) {
         pthread_join(threads[i], NULL);
-        printf("Thread %d with size %d joined\n", i, non_zero_clusters[i].n);
     }
+
+    pthread_mutex_destroy(&global_lock);
+
+    free(non_zero_clusters);
 }
 
 
