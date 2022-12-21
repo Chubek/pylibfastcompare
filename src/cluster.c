@@ -20,11 +20,11 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
 
     for (tuphash_t i = 0; i < hm->next_round; i++) {
         curr_bucket = hm->bucket_arr[i];
-        if (curr_bucket.n == 0) continue;
+        if (curr_bucket.n == 0 || curr_bucket.set_fifty != 50) continue;
 
         for (tuphash_t j = 0; j < curr_bucket.next_round; j++) {
             curr_cluster = curr_bucket.cluster_arr[j];
-            if (curr_cluster.n < 2 || curr_cluster.n > HASH_MAX) continue;  
+            if (curr_cluster.n < 2 || curr_cluster.set_fifty != 50) continue;  
 
             hmsize_t new_round = next_round_bits16(ret.size);
             if (new_round > next_round) {

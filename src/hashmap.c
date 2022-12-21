@@ -36,21 +36,47 @@ tuphash_t hash_tuple_to_index(uint64_t x, hmsize_t len)
 
 
 hm_s new_hashmap() {
-    return (hm_s){.bucket_arr=calloc(8, sizeof(bucket_s)), .n=0, .next_round=8};
+    return (hm_s){.bucket_arr=calloc(HASH_MAX, sizeof(bucket_s)), .n=0, .next_round=HASH_MAX};
 }
 
 bucket_s new_bucket(tuphash_t hash) {
-    return (bucket_s){.cluster_arr=calloc(8, sizeof(cluster_s)), .hash=hash, .n=0, .next_round=8};
+    return (bucket_s){.cluster_arr=calloc(HASH_MAX, sizeof(cluster_s)), .hash=hash, .n=0, .next_round=HASH_MAX, .set_fifty=50};
 }
 
 cluster_s new_cluster(tuphash_t hash, hmsize_t len) {
-    return (cluster_s){.clusterseq_arr=calloc(8, sizeof(clusterseq_s)), .hash=hash, .len_seq=len, .n=0, .next_round=8};
+    return (cluster_s){.clusterseq_arr=calloc(8, sizeof(clusterseq_s)), .hash=hash, .len_seq=len, .n=0, .next_round=8, .set_fifty=50};
 }
 
 clusterseq_s new_clusterseq(seq_t seq_packed, size_t out_len, size_t index_in_array) {
-    return (clusterseq_s){.seq_packed=seq_packed, .out_len=out_len, .index_in_array=index_in_array, .is_dup=0};
+    return (clusterseq_s){.seq_packed=seq_packed, .out_len=out_len, .index_in_array=index_in_array, .is_dup=0, .set_fifty=50};
 }
 
+
+void free_clusterseq(clusterseq_s *self) {
+    free(self->seq_packed);
+}
+
+void free_cluster(cluster_s *self) {
+    for (int i = 0; i < self->next_round; i++) {
+        if (self->set_fifty != 50) continue;
+        free_clusterseq(&self->clusterseq_arr[i]);
+    }
+
+}
+
+void free_bucket(bucket_s *self) {
+    for (int i = 0; i < self->next_round; i++) {
+        if (self->set_fifty != 50) continue;
+        free_cluster(&self->cluster_arr[i]);
+    }
+
+}
+
+void free_hashmap(hm_s *self) {
+    for (int i = 0; i < self->next_round; i++) {
+        free_bucket(&self->bucket_arr[i]);
+    }
+}
 
 void resize_insert_bucket(hm_s *self, tuphash_t hash) {
     tuphash_t next_round = next_round_bits16(hash);
@@ -118,12 +144,17 @@ void insert_seq_into_hashmap(hm_s *self, uint64_t key, seq_t seq, hmsize_t len_s
     }
 
     bucket_s *bucket = &self->bucket_arr[hash_bucket - 1];
+    bucket->hash = hash_bucket;
+    bucket->set_fifty = 50;
 
     if (hash_cluster > bucket->next_round) {
         resize_insert_cluster(bucket, hash_cluster, len_seq);
     }
 
     cluster_s *cluster = &bucket->cluster_arr[hash_cluster - 1];
+    cluster->hash = hash_cluster;
+    cluster->set_fifty = 50;
+
 
     resize_insert_clusterseq(cluster, seq, out_len, index_in_array);
 }

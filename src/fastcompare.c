@@ -38,8 +38,7 @@ void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
     non_zero_clusters_s non_zeroes = filter_out_zero_clusters(&clustered);
     
     printf("Doing hamming...\n");
-    hamming_clusters_hm(non_zeroes.clusters, non_zeroes.size);
-   
+    hamming_clusters_hm(non_zeroes.clusters, non_zeroes.size); 
 
     printf("Fully done!\n");
 }
@@ -89,19 +88,23 @@ void *hamming_cluster_single(void *cluster_ptr)
     do
     {
         lead = &cluster_seqs[i];
-        if (lead->is_dup || !lead->seq_packed)
-            continue;     
 
+        if (!lead) continue;
+        if (!lead->seq_packed) continue;
+        if (lead->set_fifty != 50) continue;
+       
         anew:   
         diff = 0;
         int j = i + 1 + ahead;
 
         do 
         {
-            candidate = &cluster_seqs[j];    
+            candidate = &cluster_seqs[j];      
 
-            if (!candidate->seq_packed || candidate->out_len != lead->out_len) continue;        
-            
+            if (!candidate) continue;
+            if (!candidate->seq_packed) continue;
+            if (candidate->set_fifty != 50) continue;
+
             diff = hamming_hseq_pair(*lead, *candidate);
 
             if (diff < 2) {
@@ -116,6 +119,10 @@ void *hamming_cluster_single(void *cluster_ptr)
         } while (j++ < cluster_size);
         ahead = 0;
     } while (i++ < cluster_size);
+
+    for (int i = 0; i < cluster_size; i++) {
+        free(cluster->clusterseq_arr[i].seq_packed);
+    }
 }
 
 

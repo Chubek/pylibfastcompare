@@ -23,6 +23,7 @@ typedef struct HashMapNode {
     size_t out_len;
     size_t index_in_array;
     int is_dup;
+    int set_fifty;
 } clusterseq_s;
 typedef clusterseq_s* clusterseqarr_t;
 
@@ -32,6 +33,7 @@ typedef struct HashMapValue {
     hmsize_t n;
     hmsize_t next_round;
     tuphash_t hash;
+    int set_fifty;
 } cluster_s;
 typedef cluster_s* clusterarr_t;
 
@@ -41,6 +43,7 @@ typedef struct HashMapBucket {
     cluster_s *cluster_arr;
     tuphash_t n;
     tuphash_t next_round;
+    int set_fifty;
 } bucket_s;
 
 
@@ -64,3 +67,7 @@ void resize_insert_cluster(bucket_s *self, tuphash_t hash, hmsize_t len);
 void resize_insert_clusterseq(cluster_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array);
 void insert_seq_into_hashmap(hm_s *self, uint64_t key, seq_t seq, hmsize_t len_seq, hmsize_t out_len, size_t index_in_array);
 uint64_t djb2(seq_t seq, int size);
+void free_clusterseq(clusterseq_s *self);
+void free_cluster(cluster_s *self);
+void free_bucket(bucket_s *self);
+void free_hashmap(hm_s *self);
