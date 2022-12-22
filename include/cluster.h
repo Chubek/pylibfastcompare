@@ -4,7 +4,7 @@ typedef struct NonZeroCluster {
 } non_zero_cluster_s;
 
 typedef struct NonZeroClusters {
-    cluster_s *nz_clusters;
+    non_zero_cluster_s *nz_clusters;
     tuphash_t size;
 } non_zero_clusters_s;
 

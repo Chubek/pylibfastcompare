@@ -29,7 +29,7 @@ typedef uint8_t buckethash_t;
 #define SIZE_HAM 32
 
 void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[]);
-void hamming_clusters_hm(cluster_s *non_zero_clusters, tuphash_t size);
+void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size);
 void *hamming_cluster_single(void *cluster_ptr);
 int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM]);
 int hamming_hseq_pair(clusterseq_s a, clusterseq_s b);

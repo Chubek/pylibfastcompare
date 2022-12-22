@@ -46,7 +46,7 @@ void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
     printf("Fully done!\n");
 }
 
-void hamming_clusters_hm(cluster_s *non_zero_clusters, tuphash_t size)
+void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
 {
     if (pthread_mutex_init(&global_lock, NULL) != 0) {
         printf("Failed to initiailize global thread lock. Exiting...\n");
@@ -77,7 +77,7 @@ void hamming_clusters_hm(cluster_s *non_zero_clusters, tuphash_t size)
 
 void *hamming_cluster_single(void *cluster_ptr)
 {
-    cluster_s *cluster = (cluster_s *)cluster_ptr;
+    non_zero_cluster_s *cluster = (non_zero_cluster_s *)cluster_ptr;
 
     clusterseqarr_t cluster_seqs = cluster->clusterseq_arr;
     hmsize_t cluster_size = cluster->n;

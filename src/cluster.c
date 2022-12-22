@@ -4,7 +4,7 @@
 non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
 {      
     int size_clusters = 0;
-    cluster_s *nz_clusters = NULL;
+    non_zero_clusters_s nz_clusters = (non_zero_clusters_s){.nz_clusters=NULL, .size=0};
     
     bucket_s curr_bucket;
     cluster_s curr_cluster;
@@ -14,29 +14,54 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
 
         curr_bucket = hm->bucket_arr[i];
         if (curr_bucket.n == 2) continue;
-               
+
+        non_zero_cluster_s curr_nz = (non_zero_cluster_s){.clusterseq_arr=NULL, .n=0};
+        uint32_t curr_size = 0;  
+
         for (tuphash_t j = 0; j < BUCKET_HASH_MAX; j++) {
             if (curr_bucket.occuped[j] != OCCUPIED) continue;
             
             curr_cluster = curr_bucket.cluster_arr[j];
             if (curr_cluster.n < 2) continue;         
 
-           cluster_s *nnptr = (cluster_s *)realloc(nz_clusters, ++size_clusters * SZ_CLST);
+            curr_size += curr_cluster.n;
+
+           clusterseq_s *nnptr = (clusterseq_s *)realloc(curr_nz.clusterseq_arr, curr_size * SZ_CLSQ);
 
             if (!nnptr) {
-                printf("Error reallocating NZ clusters.\n");
+                printf("Error reallocating NZ cluster.\n");
                 exit(ENOMEM);
             }
             
-            nz_clusters = nnptr;    
-            nz_clusters[size_clusters - 1] = curr_cluster;
+            curr_nz.clusterseq_arr = nnptr;
+            
+            int j = 0;
+            for (int i = curr_nz.n; i < curr_size; i++) {
+                curr_nz.clusterseq_arr[i] = curr_cluster.clusterseq_arr[j++];
+            }
 
+            curr_nz.n = curr_size;
         }
+
+        if (curr_size == 0) continue;
+
+        non_zero_cluster_s *nnptr = (non_zero_cluster_s *)realloc(nz_clusters.nz_clusters, ++size_clusters * SZ_NZC);
+
+        if (!nnptr) {
+                printf("Error reallocating NZ clusters.\n");
+                exit(ENOMEM);
+        }
+
+
+        nz_clusters.nz_clusters = nnptr;
+        nz_clusters.nz_clusters[size_clusters - 1] = curr_nz;
     }
+
+    nz_clusters.size = size_clusters;
 
 
     printf("Got %d non-zero clusters\n", size_clusters);
-    return (non_zero_clusters_s){.nz_clusters=nz_clusters, .size=size_clusters};
+    return nz_clusters;
 }
 
 
