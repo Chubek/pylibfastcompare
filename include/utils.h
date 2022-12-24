@@ -15,3 +15,5 @@ int quicksort_partition(chartype_t *in, int curr_l, int curr_h);
 void swap(chartype_t *in, int i, int j);
 int sleepms(long miliseconds);
 int max_len(int *lens, int size);
+void* realloc_zero(void* p_buffer, size_t old_size, size_t new_size);
+int sum_array(int in[NUM_PARA]);

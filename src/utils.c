@@ -59,3 +59,21 @@ int max_len(int *lens, int size) {
 
     return max;
 }
+
+void* realloc_zero(void* p_buffer, size_t old_size, size_t new_size) {
+  void* p_new = realloc(p_buffer, new_size);
+  if ( new_size > old_size && p_new ) {
+    size_t diff = new_size - old_size;
+    void* p_start = ((char*)p_new) + old_size;
+    memset(p_start, 0, diff);
+  }
+  return p_new;
+}
+
+int sum_array(int in[NUM_PARA]) {
+    int out = 0;
+
+    for (int i = 0; i < NUM_PARA; i++) out += in[i];
+
+    return out;
+}

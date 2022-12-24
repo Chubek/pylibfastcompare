@@ -9,6 +9,9 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
     bucket_s curr_bucket;
     cluster_s curr_cluster;
 
+    size_t old_size_clusters = 0;
+    size_t new_size_clusters = 0;
+
     for (tuphash_t i = 0; i < HASH_MAX; i++) {
         if (hm->occupied[i] != OCCUPIED) continue;
 
@@ -18,15 +21,20 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
         non_zero_cluster_s curr_nz = (non_zero_cluster_s){.clusterseq_arr=NULL, .n=0};
         uint32_t curr_size = 0;  
 
+        size_t old_size = 0;
+        size_t new_size = 0;
+
         for (tuphash_t j = 0; j < BUCKET_HASH_MAX; j++) {
             if (curr_bucket.occuped[j] != OCCUPIED) continue;
             
             curr_cluster = curr_bucket.cluster_arr[j];
             if (curr_cluster.n < 2) continue;         
 
+            old_size = curr_size * SZ_CLSQ;
             curr_size += curr_cluster.n;
+            new_size = curr_size * SZ_CLSQ;
 
-           clusterseq_s *nnptr = (clusterseq_s *)realloc(curr_nz.clusterseq_arr, curr_size * SZ_CLSQ);
+           clusterseq_s *nnptr = (clusterseq_s *)realloc_zero(curr_nz.clusterseq_arr, old_size, new_size);
 
             if (!nnptr) {
                 printf("Error reallocating NZ cluster.\n");
@@ -45,7 +53,10 @@ non_zero_clusters_s filter_out_zero_clusters(hm_s *hm)
 
         if (curr_size == 0) continue;
 
-        non_zero_cluster_s *nnptr = (non_zero_cluster_s *)realloc(nz_clusters.nz_clusters, ++size_clusters * SZ_NZC);
+        old_size_clusters = size_clusters * SZ_NZC;
+        new_size_clusters = ++size_clusters * SZ_NZC;
+
+        non_zero_cluster_s *nnptr = (non_zero_cluster_s *)realloc_zero(nz_clusters.nz_clusters, old_size_clusters, new_size_clusters);
 
         if (!nnptr) {
                 printf("Error reallocating NZ clusters.\n");

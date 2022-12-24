@@ -1,5 +1,5 @@
 /* seq must be null-terminated */
-void _hamming_clusters_hm(clusterarr_t non_zero_clusters, tuphash_t size)
+void _hamming_clusters_hm(cluster_s * non_zero_clusters, tuphash_t size)
 {
     if (pthread_mutex_init(&global_lock, NULL) != 0) {
         printf("Failed to initiailize global thread lock. Exiting...\n");

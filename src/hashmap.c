@@ -90,7 +90,10 @@ void init_cluster(bucket_s *self, buckethash_t hash, hmsize_t len) {
 }
 
 void resize_insert_clusterseq(cluster_s *self, seq_t seq_packed, size_t out_len, size_t index_in_array) {  
-    clusterseq_s *nptr = (clusterseq_s *)realloc(self->clusterseq_arr, ++self->n * SZ_CLSQ);
+    size_t old_size = self->n * SZ_CLSQ;
+    size_t new_size = ++self->n * SZ_CLSQ;
+    
+    clusterseq_s *nptr = (clusterseq_s *)realloc_zero(self->clusterseq_arr, old_size, new_size);
     
     if (!nptr) {
         printf("Error reallcating clusterseq array.\n");

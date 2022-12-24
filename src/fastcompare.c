@@ -25,9 +25,11 @@ const uint8_t lookup_num_diffs[257] = {
     3, 4, 4, 4, 1};
 
 int *global_out;
-fifo_s queues[NUM_PARA];
+fifo_s *queues;
 pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
 int size_arr = 0;
+int timeout = 0;
+int engagd_workers[NUM_PARA];
 
 void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
 {   
@@ -46,7 +48,7 @@ void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[])
     printf("Fully done!\n");
 }
 
-void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
+void _hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
 {
     if (pthread_mutex_init(&global_lock, NULL) != 0) {
         printf("Failed to initiailize global thread lock. Exiting...\n");
@@ -75,7 +77,7 @@ void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
 
 
 
-void *hamming_cluster_single(void *cluster_ptr)
+void *_hamming_cluster_single(void *cluster_ptr)
 {
     non_zero_cluster_s *cluster = (non_zero_cluster_s *)cluster_ptr;
 
@@ -192,4 +194,241 @@ int get_hamming_integers(hamtype_t a[SIZE_HAM], hamtype_t b[SIZE_HAM])
             break;
     }
     return diff;
+}
+
+/* seq must be null-terminated */
+void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
+{
+    if (pthread_mutex_init(&global_lock, NULL) != 0) {
+        printf("Failed to initiailize global thread lock. Exiting...\n");
+        exit(1);
+    }
+
+    queues = calloc(NUM_PARA, sizeof(fifo_s));
+
+    pthread_t workers[NUM_PARA];
+    int nums[NUM_PARA];
+    for (int i = 0; i < NUM_PARA; i++) {
+        nums[i] = i;
+        init_fifo(&queues[i]);
+        pthread_create(&workers[i], NULL, &parallel_pairwise_comparator, &nums[i]);
+    }
+
+    int max = NUM_PARA;
+
+    printf("Creating threads for each cluster...\n");
+    if (size >= NUM_PARA * 4) {
+        non_zero_cluster_s cluster_chunks[size / (NUM_PARA * 4)][NUM_PARA * 4];
+
+        for (int i = 0; i < size / (NUM_PARA * 4); i += NUM_PARA * 4) {
+            for (int j = 0; j < NUM_PARA * 4; j++) {
+                if (i + j < size) {
+                    cluster_chunks[i][j] = non_zero_clusters[i + j];
+                } else {
+                    cluster_chunks[i][j].clusterseq_arr = NULL;
+                    cluster_chunks[i][j].n = 0;
+                }
+
+            }
+        }
+
+        pthread_t threads[size / (NUM_PARA * 4)];
+        memset(threads, 0, (size / (NUM_PARA * 4)) * sizeof(pthread_t));
+
+        for (hmsize_t i = 0; i < size / (NUM_PARA * 4); ++i)
+        {
+            pthread_create(&threads[i], NULL, &hamming_cluster_list, &cluster_chunks[i]);
+        }
+
+        printf("Joining threads...\n");
+        for (hmsize_t i = 0; i < size / (NUM_PARA * 4); i++) {
+            pthread_join(threads[i], NULL);
+            printf("%d joined\n", i);
+        }
+    } else {
+        pthread_t threads[size];
+        memset(threads, 0, (size) * sizeof(pthread_t));
+
+        for (hmsize_t i = 0; i < size; ++i)
+        {
+            pthread_create(&threads[i], NULL, &hamming_cluster_single, &non_zero_clusters[i]);
+        }
+
+        printf("Joining threads...\n");
+        for (hmsize_t i = 0; i < size; i++) {
+            pthread_join(threads[i], NULL);
+            printf("Thread %d with size %d joined\n", i, non_zero_clusters[i].n);
+        }
+
+        timeout = 1;
+        max = size;
+    }        
+
+    pthread_mutex_destroy(&global_lock);
+
+    int num_joined = 0;
+
+    while (1) {        
+        if (num_joined == sum_array(engagd_workers)) break;
+
+        for (int i = 0; i < NUM_PARA; i++) {
+            if (nums[i] == -1) continue;
+            if (queues[i].has_member == 0) continue;
+            if (engagd_workers[i] == 0) continue;
+            
+            if (queues[i].join == 1) {
+                pthread_join(workers[i], NULL);
+                num_joined += 1;
+                nums[i] = -1;
+            }
+        }      
+
+    }
+}
+
+
+
+void *hamming_cluster_list(void *cluster_ptr)
+{
+    non_zero_cluster_s *clusters = (non_zero_cluster_s *)cluster_ptr;
+
+    for (int i = 0; i < NUM_PARA * 4; i++) {
+        non_zero_cluster_s cluster = clusters[i];
+
+        if (!cluster.clusterseq_arr) continue;
+
+        clusterseqarr_t cluster_seqs = cluster.clusterseq_arr;
+        hmsize_t cluster_size = cluster.n;
+        
+        clusterseq_s *lead;
+        clusterseq_s *candidate;
+        int k = 0;
+        int *skip_rest = calloc(cluster_size, sizeof(int));
+
+        for (int i = 0; i < cluster_size; i++) {
+            set_skip:
+            if (skip_rest[i] == 1) continue; 
+
+            lead = &cluster_seqs[i];
+
+            if (!lead) continue;;
+            if (lead->out_len == 0 | lead->seq_packed == NULL) continue;;
+            if (lead->index_in_array > size_arr) continue;
+            if (lead->is_dup == 1) continue;
+
+            for (int j = i + 1; j < cluster_size; j++) {
+                if (skip_rest[j] == 1) goto set_skip;
+
+                candidate = &cluster_seqs[j];
+
+                if (!candidate) continue;;
+                if (candidate->out_len == 0 | candidate->seq_packed == NULL) continue;;
+                if (candidate->index_in_array > size_arr) continue;
+                if (candidate->is_dup == 1) continue;
+
+                if (k == NUM_PARA) k = 0;
+
+                put_fifo(&queues[k++], (pairwise_s){
+                    .lead=lead,
+                    .candidate=candidate,
+                    .index_in_cluster=j,
+                    .skip_rest=skip_rest
+                });
+           }
+        }
+    }    
+}
+
+void *hamming_cluster_single(void *cluster_ptr)
+{
+    non_zero_cluster_s *cluster = (non_zero_cluster_s *)cluster_ptr;
+
+    clusterseqarr_t cluster_seqs = cluster->clusterseq_arr;
+    hmsize_t cluster_size = cluster->n;
+
+    int diff = 0;
+
+    clusterseq_s *lead;
+    clusterseq_s *candidate;
+    int k = 0;
+    int *skip_rest = calloc(cluster_size, sizeof(int));
+
+
+    for (int i = 0; i < cluster_size; i++) {
+        set_skip:
+        if (skip_rest[i] == 1) continue;
+
+        lead = &cluster_seqs[i];
+
+        if (!lead) continue;;
+        if (lead->out_len == 0 | lead->seq_packed == NULL) continue;;
+        if (lead->index_in_array > size_arr) continue;
+        if (lead->is_dup == 1) continue;
+
+        for (int j = i + 1; j < cluster_size; j++) {
+            if (skip_rest[j] == 1)  goto set_skip;
+
+            candidate = &cluster_seqs[j];
+
+            if (!candidate) continue;;
+            if (candidate->out_len == 0 | candidate->seq_packed == NULL) continue;;
+            if (candidate->index_in_array > size_arr) continue;
+            if (candidate->is_dup == 1) continue;
+
+            if (k == NUM_PARA) k = 0;
+
+            put_fifo(&queues[k++], (pairwise_s){
+                .lead=lead,
+                .candidate=candidate,
+                .index_in_cluster=j,
+                .skip_rest=skip_rest
+            });
+        }
+    }
+}
+
+void *parallel_pairwise_comparator(void *num) {
+    int *np = (int*)num;
+    int n = *np;
+    int diff;
+    pairwise_s curr_pair;  
+    fifo_s *q = &queues[n];
+    time_t t0 = time(NULL);
+    time_t t1 = time(NULL);
+
+    do {
+        if (q->has_member == 1) {
+            curr_pair = pop_fifo(q);
+
+            pthread_mutex_lock(&global_lock);
+            engagd_workers[n] = 1;
+            pthread_mutex_unlock(&global_lock);
+
+            
+            if (curr_pair.lead->is_dup == 1) continue;
+            if (curr_pair.candidate->is_dup == 1) continue;
+            if (curr_pair.skip_rest[curr_pair.index_in_cluster] == 1) continue;
+
+            int diff = hamming_hseq_pair(*curr_pair.lead, *curr_pair.candidate);
+            if (diff < 2) {
+                pthread_mutex_lock(&global_lock);
+                global_out[curr_pair.candidate->index_in_array] = curr_pair.lead->index_in_array;
+                pthread_mutex_unlock(&global_lock);
+                curr_pair.skip_rest[curr_pair.index_in_cluster] = 1;
+                curr_pair.candidate->is_dup = 1;
+            }
+
+        }
+
+        if (timeout == 1) {
+            t1 = time(NULL);
+
+            if ((t1 - t0) >= MAX_TIMEOUT) {
+                break;
+            }
+        }
+
+
+    } while(!q->join);
+
 }
