@@ -217,31 +217,26 @@ void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
     int max = NUM_PARA;
 
     printf("Creating threads for each cluster...\n");
-    if (size >= NUM_PARA * 4) {
-        non_zero_cluster_s cluster_chunks[size / (NUM_PARA * 4)][NUM_PARA * 4];
+    if (size >= PARA_DIV) {
+        cluster_cluster_s *cluster_clusters = calloc(size / (PARA_DIV), sizeof(cluster_cluster_s));
 
-        for (int i = 0; i < size / (NUM_PARA * 4); i += NUM_PARA * 4) {
-            for (int j = 0; j < NUM_PARA * 4; j++) {
-                if (i + j < size) {
-                    cluster_chunks[i][j] = non_zero_clusters[i + j];
-                } else {
-                    cluster_chunks[i][j].clusterseq_arr = NULL;
-                    cluster_chunks[i][j].n = 0;
-                }
-
-            }
+        for (int i = 0; i < NUM_PARA; i += PARA_DIV) {
+            cluster_clusters[i].clusters = non_zero_clusters;
+            cluster_clusters[i].start = i;
+            cluster_clusters[i].end = i + (PARA_DIV);
         }
 
-        pthread_t threads[size / (NUM_PARA * 4)];
-        memset(threads, 0, (size / (NUM_PARA * 4)) * sizeof(pthread_t));
 
-        for (hmsize_t i = 0; i < size / (NUM_PARA * 4); ++i)
+        pthread_t threads[size / (PARA_DIV)];
+        memset(threads, 0, (size / (PARA_DIV)) * sizeof(pthread_t));
+
+        for (hmsize_t i = 0; i < size / (PARA_DIV); ++i)
         {
-            pthread_create(&threads[i], NULL, &hamming_cluster_list, &cluster_chunks[i]);
+            pthread_create(&threads[i], NULL, &hamming_cluster_list, &cluster_clusters[i]);
         }
 
         printf("Joining threads...\n");
-        for (hmsize_t i = 0; i < size / (NUM_PARA * 4); i++) {
+        for (hmsize_t i = 0; i < size / (PARA_DIV); i++) {
             pthread_join(threads[i], NULL);
             printf("%d joined\n", i);
         }
@@ -290,10 +285,10 @@ void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
 
 void *hamming_cluster_list(void *cluster_ptr)
 {
-    non_zero_cluster_s *clusters = (non_zero_cluster_s *)cluster_ptr;
+    cluster_cluster_s *clusters = (cluster_cluster_s *)cluster_ptr;
 
-    for (int i = 0; i < NUM_PARA * 4; i++) {
-        non_zero_cluster_s cluster = clusters[i];
+    for (int i = clusters->start; i < clusters->end; i++) {
+        non_zero_cluster_s cluster = clusters->clusters[i];
 
         if (!cluster.clusterseq_arr) continue;
 

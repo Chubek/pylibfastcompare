@@ -1,5 +1,6 @@
 #define K 4
 #define NUM_PARA 48
+#define PARA_DIV NUM_PARA * 4
 #define QBUFF   2048
 
 typedef struct PairWiseSeq {

@@ -8,6 +8,12 @@ typedef struct NonZeroClusters {
     tuphash_t size;
 } non_zero_clusters_s;
 
+typedef struct NonZeroClusterCluster {
+    non_zero_cluster_s *clusters;
+    int start;
+    int end;
+} cluster_cluster_s;
+
 #define SZ_NZC sizeof(non_zero_cluster_s)
 #define SZ_NZS sizeof(non_zero_clusters_s)
 
