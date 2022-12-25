@@ -9,5 +9,6 @@ _fastcompare*
 *.json
 vgcore*
 simd.c
+generated-*
 
 install

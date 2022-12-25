@@ -23,6 +23,8 @@ typedef uint8_t buckethash_t;
 #include "../ext-include/async-sem.h"
 #include "../ext-include/async.h"
 #include "prosumer.h"
+#include "../generated-include/generated-workers.h"
+
 
 #define ALPHA_SIZE 4
 #define CHAR_TO_IND(c) (((c == 'A') ? 0 : (c == 'C' ? 1 : (c == 'G' ? 2 : (c == 'T' || c == 'U' ? 3 : -1)))));
