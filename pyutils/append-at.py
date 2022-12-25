@@ -38,7 +38,7 @@ if __name__ == "__main__":
     argp = ArgumentParser()
     argp.add_argument("-i", "--input", default="include/fastcompare.h")
     argp.add_argument("-p", "--pattern", default="#include")
-    argp.add_argument("-a", "--appendage", default="#include \"../generated-include/generated-workers.h\"")
+    argp.add_argument("-a", "--appendage", default="#include \"../generated-include/generated-all-workers.h\"")
     argp.add_argument("-t", "--topwise", action="store_true")
     argp.add_argument("-u", "--upsert", action="store_true")
 

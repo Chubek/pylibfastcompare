@@ -23,7 +23,7 @@ typedef uint8_t buckethash_t;
 #include "../ext-include/async-sem.h"
 #include "../ext-include/async.h"
 #include "prosumer.h"
-#include "../generated-include/generated-workers.h"
+#include "../generated-include/generated-all-workers.h"
 
 
 #define ALPHA_SIZE 4
