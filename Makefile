@@ -1,5 +1,6 @@
 source_files := src/cluster.c src/hashmap.c src/utils.c src/queue.c src/fastcompare.c
 header_dir := include
+ext_header_dir := ext-include
 target_so := libfastcompare.so
 arch := -mavx2
 
@@ -36,13 +37,14 @@ install_op:
 	mv ./$(target_so) $(DESTDIR)$(PREFIX)/lib/
 	mkdir -p $(DESTDIR)$(PREFIX)/include/fastcompare
 	cp $(header_dir)/* $(DESTDIR)$(PREFIX)/include/fastcompare
+	CP $(ext_header_dir)/* $(DESTDIR)$(PREFIX)/include/fastcompare
 	
 
 libfastcompare:
-	$(CC) $(CFLAGS) -I$(header_dir) $(source_files) 
+	$(CC) $(CFLAGS) -I$(header_dir) -I$(ext_header_dir) $(source_files) 
 
 clean:
 	rm -f $(target_so)
 
 standalone:
-	gcc -mavx2 -ggdb -I$(header_dir) $(source_files)
+	gcc -mavx2 -ggdb -I$(header_dir) -I$(ext_header_dir) $(source_files)

@@ -96,24 +96,24 @@ void encode_to_0123(chartype_t in[32], chartype_t out[32]) {
     _mm256_storeu_si256((__m256i*)&out[0], andd);   
 }
 
-void and_buffer(chartype_t buffer[SIZE_CHARS], chartype_t out[], int starting_point, int size, int k)
+void and_fifo(chartype_t fifo[SIZE_CHARS], chartype_t out[], int starting_point, int size, int k)
 {
     chartype_t enc1;
     chartype_t enc2;
     chartype_t enc3;
     chartype_t enc4;
     
-    chartype_t out_buffer[32];
-    memset(out_buffer, 0, 32);
+    chartype_t out_fifo[32];
+    memset(out_fifo, 0, 32);
     
-    encode_to_0123(buffer, out_buffer);
+    encode_to_0123(fifo, out_fifo);
 
     for (int i = 0; i < SIZE_CHARS; i += k)
     {                
-        enc1 = out_buffer[i];
-        enc2 = out_buffer[i + 1];
-        enc3 = out_buffer[i + 2];
-        enc4 = out_buffer[i + 3];
+        enc1 = out_fifo[i];
+        enc2 = out_fifo[i + 1];
+        enc3 = out_fifo[i + 2];
+        enc4 = out_fifo[i + 3];
         out[(starting_point + i) / k] = pack_1_byte_into_8_bits(enc1, enc2, enc3, enc4);
     }
 }
@@ -126,14 +126,14 @@ void get_kmers(chartype_t *in, chartype_t out[], int size, int k)
         exit(1);
     }
 
-    char buffer[32];
+    char fifo[32];
 
     for (int i = 0; i < size; i += 32)
     {
-        memset(buffer, 0, 32);
-        for (int j = 0; j < 32; j++) buffer[j] = in[j + i];
+        memset(fifo, 0, 32);
+        for (int j = 0; j < 32; j++) fifo[j] = in[j + i];
 
-        and_buffer(buffer, out, i, size, k);
+        and_fifo(fifo, out, i, size, k);
     }
 }
 
@@ -294,8 +294,8 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
 
     if (a.out_len > 10000 || b.out_len > 10000) return 0;
 
-    hamtype_t a_buffer[SIZE_HAM];
-    hamtype_t b_buffer[SIZE_HAM];
+    hamtype_t a_fifo[SIZE_HAM];
+    hamtype_t b_fifo[SIZE_HAM];
     size_t num_bytes = SIZE_HAM * sizeof(hamtype_t);    
 
     seq_t a_seq = a.seq_packed;
@@ -305,13 +305,13 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
     for (size_t i = 0; i < out_len; i += SIZE_HAM)
     {
 
-        memset(a_buffer, 0, num_bytes);
-        memset(b_buffer, 0, num_bytes);        
+        memset(a_fifo, 0, num_bytes);
+        memset(b_fifo, 0, num_bytes);        
         
-        for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) a_buffer[i] = a_seq[i + j];
-        for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) b_buffer[i] = b_seq[i + j];
+        for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) a_fifo[i] = a_seq[i + j];
+        for (int j = 0; j < (i > (out_len - (out_len % 32)) ? out_len % 32 : 32); j++) b_fifo[i] = b_seq[i + j];
 
-        new_diff = get_hamming_integers(a_buffer, b_buffer);
+        new_diff = get_hamming_integers(a_fifo, b_fifo);
         diff += new_diff;
     }
  

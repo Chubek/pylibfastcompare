@@ -141,8 +141,8 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
 
     if (a.out_len != b.out_len) return 0;
 
-    hamtype_t a_buffer[SIZE_HAM];
-    hamtype_t b_buffer[SIZE_HAM];
+    hamtype_t a_fifo[SIZE_HAM];
+    hamtype_t b_fifo[SIZE_HAM];
     size_t num_bytes = SIZE_HAM * sizeof(hamtype_t);    
 
     seq_t a_seq = a.seq_packed;
@@ -155,15 +155,15 @@ int hamming_hseq_pair(clusterseq_s a, clusterseq_s b)
     for (size_t i = 0; i < out_len; i += SIZE_HAM)
     {
 
-        memset(a_buffer, 0, num_bytes);
-        memset(b_buffer, 0, num_bytes);        
+        memset(a_fifo, 0, num_bytes);
+        memset(b_fifo, 0, num_bytes);        
         
         max_len = out_len - diffed_len >= SIZE_HAM ? SIZE_HAM : out_len - diffed_len;
 
-        for (int j = 0; j < max_len; j++) a_buffer[j] = a_seq[i + j];
-        for (int j = 0; j < max_len; j++) b_buffer[j] = b_seq[i + j];
+        for (int j = 0; j < max_len; j++) a_fifo[j] = a_seq[i + j];
+        for (int j = 0; j < max_len; j++) b_fifo[j] = b_seq[i + j];
 
-        new_diff = get_hamming_integers(a_buffer, b_buffer);
+        new_diff = get_hamming_integers(a_fifo, b_fifo);
         diff += new_diff;
 
         diffed_len += SIZE_HAM;
@@ -216,6 +216,8 @@ void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
 
     int max = NUM_PARA;
 
+    printf("%d workers started...", NUM_PARA);
+    int ms = 0;
     printf("Creating threads for each cluster...\n");
     if (size >= PARA_DIV) {
         cluster_cluster_s *cluster_clusters = calloc(size / (PARA_DIV), sizeof(cluster_cluster_s));
@@ -226,7 +228,7 @@ void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
             cluster_clusters[i].end = i + (PARA_DIV);
         }
 
-
+        printf("Starting %d threads...\n", size / (PARA_DIV));
         pthread_t threads[size / (PARA_DIV)];
         memset(threads, 0, (size / (PARA_DIV)) * sizeof(pthread_t));
 
@@ -238,9 +240,14 @@ void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
         printf("Joining threads...\n");
         for (hmsize_t i = 0; i < size / (PARA_DIV); i++) {
             pthread_join(threads[i], NULL);
-            printf("%d joined\n", i);
         }
+
+        ms = (size / (PARA_DIV)) * 1;
+
     } else {
+        printf("Starting %d threads...\n", size);
+
+
         pthread_t threads[size];
         memset(threads, 0, (size) * sizeof(pthread_t));
 
@@ -252,33 +259,42 @@ void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size)
         printf("Joining threads...\n");
         for (hmsize_t i = 0; i < size; i++) {
             pthread_join(threads[i], NULL);
-            printf("Thread %d with size %d joined\n", i, non_zero_clusters[i].n);
         }
 
         timeout = 1;
         max = size;
+
+        ms = size * 150;
     }        
 
     pthread_mutex_destroy(&global_lock);
 
+   
+    printf("Waiting for %d millis for workers to engage...\n", ms);
+    sleepms(ms);
+
     int num_joined = 0;
 
+    printf("Workers joined: ");
+
     while (1) {        
-        if (num_joined == sum_array(engagd_workers)) break;
+        if (num_joined == sum_array(engagd_workers, NUM_PARA)) break;
 
         for (int i = 0; i < NUM_PARA; i++) {
             if (nums[i] == -1) continue;
-            if (queues[i].has_member == 0) continue;
             if (engagd_workers[i] == 0) continue;
             
             if (queues[i].join == 1) {
                 pthread_join(workers[i], NULL);
+                printf("%d... ", i);
                 num_joined += 1;
                 nums[i] = -1;
             }
         }      
 
     }
+
+    printf("\n");
 }
 
 
@@ -295,19 +311,20 @@ void *hamming_cluster_list(void *cluster_ptr)
         clusterseqarr_t cluster_seqs = cluster.clusterseq_arr;
         hmsize_t cluster_size = cluster.n;
         
+        anew:
         clusterseq_s *lead;
         clusterseq_s *candidate;
         int k = 0;
-        int *skip_rest = calloc(cluster_size, sizeof(int));
+        int skip_rest[cluster_size];
+        memset(skip_rest, 0, 4 * cluster_size);
+        int sum = 0;
 
         for (int i = 0; i < cluster_size; i++) {
             set_skip:
-            if (skip_rest[i] == 1) continue; 
+            if (sum_array(skip_rest, cluster_size) == cluster_size) goto anew;
 
             lead = &cluster_seqs[i];
-
-            if (!lead) continue;;
-            if (lead->out_len == 0 | lead->seq_packed == NULL) continue;;
+           
             if (lead->index_in_array > size_arr) continue;
             if (lead->is_dup == 1) continue;
 
@@ -316,8 +333,6 @@ void *hamming_cluster_list(void *cluster_ptr)
 
                 candidate = &cluster_seqs[j];
 
-                if (!candidate) continue;;
-                if (candidate->out_len == 0 | candidate->seq_packed == NULL) continue;;
                 if (candidate->index_in_array > size_arr) continue;
                 if (candidate->is_dup == 1) continue;
 
@@ -346,7 +361,8 @@ void *hamming_cluster_single(void *cluster_ptr)
     clusterseq_s *lead;
     clusterseq_s *candidate;
     int k = 0;
-    int *skip_rest = calloc(cluster_size, sizeof(int));
+    int skip_rest[cluster_size];
+    memset(skip_rest, 0, 4 * cluster_size);
 
 
     for (int i = 0; i < cluster_size; i++) {
@@ -390,6 +406,7 @@ void *parallel_pairwise_comparator(void *num) {
     fifo_s *q = &queues[n];
     time_t t0 = time(NULL);
     time_t t1 = time(NULL);
+    time_t dt;
 
     do {
         if (q->has_member == 1) {
@@ -417,8 +434,9 @@ void *parallel_pairwise_comparator(void *num) {
 
         if (timeout == 1) {
             t1 = time(NULL);
+            dt = t1 - t0;
 
-            if ((t1 - t0) >= MAX_TIMEOUT) {
+            if (dt >= MAX_TIMEOUT) {
                 break;
             }
         }
@@ -427,3 +445,5 @@ void *parallel_pairwise_comparator(void *num) {
     } while(!q->join);
 
 }
+
+

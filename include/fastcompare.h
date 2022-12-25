@@ -17,17 +17,20 @@ typedef uint32_t hmsize_t;
 typedef uint8_t buckethash_t;
 
 #include "hashmap.h"
-#include "queue.h"
+#include "fifo.h"
 #include "cluster.h"
 #include "utils.h"
+#include "../ext-include/async-sem.h"
+#include "../ext-include/async.h"
+#include "prosumer.h"
 
 #define ALPHA_SIZE 4
 #define CHAR_TO_IND(c) (((c == 'A') ? 0 : (c == 'C' ? 1 : (c == 'G' ? 2 : (c == 'T' || c == 'U' ? 3 : -1)))));
-#define BUFFER_MAX 6000
+#define fifo_MAX 6000
 #define SIZE_CHARS 32
 #define SIZE_OUT 4
 #define SIZE_HAM 32
-#define MAX_TIMEOUT 2
+#define MAX_TIMEOUT 5
 
 void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[]);
 void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size);

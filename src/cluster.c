@@ -96,24 +96,24 @@ void encode_to_0123(chartype_t in[32], chartype_t out[32]) {
     _mm256_storeu_si256((__m256i*)&out[0], andd);   
 }
 
-void and_buffer(chartype_t buffer[SIZE_CHARS], chartype_t out[], int starting_point, int size, int k)
+void and_fifo(chartype_t fifo[SIZE_CHARS], chartype_t out[], int starting_point, int size, int k)
 {
     chartype_t enc1;
     chartype_t enc2;
     chartype_t enc3;
     chartype_t enc4;
     
-    chartype_t out_buffer[32];
-    memset(out_buffer, 0, 32);
+    chartype_t out_fifo[32];
+    memset(out_fifo, 0, 32);
     
-    encode_to_0123(buffer, out_buffer);
+    encode_to_0123(fifo, out_fifo);
 
     for (int i = 0; i < SIZE_CHARS; i += k)
     {                
-        enc1 = out_buffer[i];
-        enc2 = out_buffer[i + 1];
-        enc3 = out_buffer[i + 2];
-        enc4 = out_buffer[i + 3];
+        enc1 = out_fifo[i];
+        enc2 = out_fifo[i + 1];
+        enc3 = out_fifo[i + 2];
+        enc4 = out_fifo[i + 3];
         out[(starting_point + i) / k] = pack_1_byte_into_8_bits(enc1, enc2, enc3, enc4);
     }
 }
@@ -126,19 +126,19 @@ void get_kmers(chartype_t *in, chartype_t out[], int size, int k)
         exit(1);
     }
 
-    char buffer[32];
+    char fifo[32];
     int max_len = 0;
     int diffed_len = 0;
 
     for (int i = 0; i < size; i += SIZE_CHARS)
     {
-        memset(buffer, 0, 32);
+        memset(fifo, 0, 32);
 
         max_len = size - diffed_len >= SIZE_CHARS ? SIZE_CHARS : size - diffed_len;
 
-        for (int j = 0; j < max_len; j++) buffer[j] = in[j + i];
+        for (int j = 0; j < max_len; j++) fifo[j] = in[j + i];
 
-        and_buffer(buffer, out, i, size, k);
+        and_fifo(fifo, out, i, size, k);
 
         diffed_len += SIZE_CHARS;
     }

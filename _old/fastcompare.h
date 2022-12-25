@@ -26,7 +26,7 @@
 
 #define ALPHA_SIZE 4
 #define CHAR_TO_IND(c) (((c == 'A') ? 0 : (c == 'C' ? 1 : (c == 'G' ? 2 : (c == 'T' || c == 'U' ? 3 : -1)))));
-#define BUFFER_MAX 6000
+#define fifo_MAX 6000
 #define SIZE_CHARS 32
 #define SIZE_OUT 4
 #define SIZE_HAM 32
@@ -110,7 +110,7 @@ typedef struct PairWiseSeq {
 } pairwise_s;
 
 
-typedef struct FifOQueue {
+typedef struct fifoQueue {
     pairwise_s arr[QBUFF];
     int curr_index;
     int has_member;

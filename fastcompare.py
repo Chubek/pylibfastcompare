@@ -20,16 +20,16 @@ def seqs_bytes(
     thread_div: int
 ) -> Tuple[bytearray, List[Tuple[str, str]], int]:
     rec_reader = SimpleFastaParser(open(path, "r"))
-    buffers = []
+    fifos = []
     hseqs = []
     n = 0
 
     for header, seq in rec_reader:
-        buffers.append(ffi.new("uint8_t[]", (seq.encode('ascii') + ZERO_ENCODED)))
+        fifos.append(ffi.new("uint8_t[]", (seq.encode('ascii') + ZERO_ENCODED)))
         hseqs.append((header, seq))
         n += 1
 
-    return buffers, hseqs, n
+    return fifos, hseqs, n
 
 def assembler_worker(size: int, start: int, end: int, heads_seqs: List[Tuple[str, str]], arr_in: List[int], dict_out: Dict[str, Dict[str, str]]): 
     for i in range(start, end):
@@ -48,15 +48,13 @@ def assembler_worker(size: int, start: int, end: int, heads_seqs: List[Tuple[str
 def run_libfastcompare(path: str, thread_div: int):
     print('Reading, getting bytes...')
     t = time()
-    buffer, haader_seqs, size = seqs_bytes(path, thread_div)
+    fifo, haader_seqs, size = seqs_bytes(path, thread_div)
     print(f"Got {size} char arrs. Took {time() - t} seconds")
     out = ffi.new("int[]", [-1] * size)
     t = time()
     print("Getting hamming with FFI...")
-    lib.cluster_ham_and_mark(buffer, size, K, out)
+    lib.cluster_ham_and_mark(fifo, size, K, out)
     out = [i for i in out]
-
-    print(out)
 
     print(f"Done deduping. Took {time() - t} seconds. Exporting results...")
     print(f"Found {len([i for i in out if i != -1])} dups")
