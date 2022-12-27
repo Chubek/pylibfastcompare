@@ -103,7 +103,7 @@ def assemble_file(
             "src": final_text + "\n\n" + final_lut + "\n\n" + final_prosumers
         })
 
-    prosumer_array_sigs.append(f"\n\nextern {prosumer_types[0]} *all_drivers[{nt + 1}]")
+    prosumer_array_sigs.append(f"\n\nextern {prosumer_types[0]} *all_drivers[{nt + 1}];")
 
     headers_all = []
 

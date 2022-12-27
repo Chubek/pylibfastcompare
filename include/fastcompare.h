@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <stdatomic.h>
 
 typedef uint8_t chartype_t;
 typedef uint64_t outtype_t;
@@ -20,10 +21,10 @@ typedef uint8_t buckethash_t;
 #include "fifo.h"
 #include "cluster.h"
 #include "utils.h"
-#include "../ext-include/async-sem.h"
-#include "../ext-include/async.h"
-#include "prosumer.h"
-#include "../generated-include/generated-all-workers.h"
+//#include "../ext-include/async-sem.h"
+//#include "../ext-include/async.h"
+//#include "prosumer.h"
+//#include "../generated-include/generated-all-workers.h"
 
 
 #define ALPHA_SIZE 4

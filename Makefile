@@ -1,4 +1,4 @@
-source_files := src/cluster.c src/hashmap.c src/utils.c src/queue.c src/fastcompare.c
+source_files := src/cluster.c src/hashmap.c src/utils.c src/fifo.c src/fastcompare.c
 header_dir := include
 ext_header_dir := ext-include
 target_so := libfastcompare.so
@@ -37,7 +37,7 @@ install_op:
 	mv ./$(target_so) $(DESTDIR)$(PREFIX)/lib/
 	mkdir -p $(DESTDIR)$(PREFIX)/include/fastcompare
 	cp $(header_dir)/* $(DESTDIR)$(PREFIX)/include/fastcompare
-	CP $(ext_header_dir)/* $(DESTDIR)$(PREFIX)/include/fastcompare
+	#CP $(ext_header_dir)/* $(DESTDIR)$(PREFIX)/include/fastcompare
 	
 
 libfastcompare:
