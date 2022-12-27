@@ -17,3 +17,4 @@ int sleepms(long miliseconds);
 int max_len(int *lens, int size);
 void* realloc_zero(void* p_fifo, size_t old_size, size_t new_size);
 int sum_array(int in[], int size);
+void sleepns_portable(unsigned long nsec);

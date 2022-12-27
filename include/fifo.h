@@ -14,13 +14,9 @@ typedef struct PairWiseSeq {
 
 typedef struct FifoQueue {
     pairwise_s *arr;
-    int curr_index;
-    int curr_head;
-    int has_member;
     pthread_mutex_t lock;
-    int join;
-    int engaged;
-    int num_checked;
+    int join, curr_index, curr_head, has_member, engaged;
+    time_t started;
 } fifo_s;
 
 void init_fifo(fifo_s *self);

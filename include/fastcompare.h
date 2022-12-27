@@ -33,7 +33,7 @@ typedef uint8_t buckethash_t;
 #define SIZE_CHARS 32
 #define SIZE_OUT 4
 #define SIZE_HAM 32
-#define MAX_TIMEOUT 5
+#define MAX_TIMEOUT 2
 
 void cluster_ham_and_mark(chartype_t **seqs, size_t num_seqs, int k, int out[]);
 void hamming_clusters_hm(non_zero_cluster_s *non_zero_clusters, tuphash_t size);

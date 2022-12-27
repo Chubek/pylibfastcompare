@@ -1,8 +1,9 @@
 #include "../include/fastcompare.h"
 
 void init_fifo(fifo_s *self) {
-    self->curr_index = self->num_checked = self->engaged = self->curr_head = self->has_member = self->join = 0;   
+    self->curr_index = self->engaged = self->curr_head = self->has_member = self->join = 0;   
     self->arr = NULL;
+    self->started = time(NULL);
 }
 
 void put_fifo(fifo_s *self, clusterseq_s *lead, clusterseq_s *candidate, int index_in_cluster, int *skip_rest) {

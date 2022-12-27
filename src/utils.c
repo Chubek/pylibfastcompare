@@ -12,6 +12,12 @@ int sleepms(long miliseconds)
    return nanosleep(&req , &rem);
 }
 
+void sleepns_portable(unsigned long nsec) {
+    struct timespec delay = { nsec / 1000000000, nsec % 1000000000 };
+    pselect(0, NULL, NULL, NULL, &delay, NULL);
+}
+
+
 void swap(chartype_t *in, int i, int j)
 {
     chartype_t tmp = in[i];
